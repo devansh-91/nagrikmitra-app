@@ -53,6 +53,10 @@ OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2").strip()
 API_HOST = os.environ.get("API_HOST", "0.0.0.0")
 API_PORT = int(os.environ.get("API_PORT", "8000"))
 
+# Render sets RENDER=true on every deployed service (always HTTPS there);
+# unset locally, where dev runs over plain http://.
+IS_RENDER = os.environ.get("RENDER", "").strip().lower() == "true"
+
 # --- Auth ---
 # SESSION_SECRET: if unset, nagrikmitra/auth.py generates one and persists it
 # to data/.session_secret (gitignored) on first run, so sessions survive

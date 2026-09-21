@@ -28,6 +28,7 @@ from nagrikmitra.config import (
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET,
     GOOGLE_REDIRECT_URI,
+    IS_RENDER,
     SESSION_SECRET,
     SESSION_SECRET_FILE,
 )
@@ -98,8 +99,7 @@ def create_session_cookie(response: Response, user: dict) -> None:
         max_age=SESSION_MAX_AGE,
         httponly=True,
         samesite="lax",
-        # secure=True as well once served over HTTPS in a real deployment;
-        # left off here so the cookie still works over local http://.
+        secure=IS_RENDER,
         path="/",
     )
 
