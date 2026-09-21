@@ -1,0 +1,44 @@
+# Nagarik Mitra taxonomy — FROZEN for v1. Do not add/remove classes.
+
+domains:
+  Roads:
+    department_full: "PWD (Public Works Department)"
+    department_short: "PWD"
+  Lights:
+    department_full: "Municipal Corporation — Street Lighting Division"
+    department_short: "Municipal Corp."
+  Water:
+    department_full: "Jal Board (Water Supply and Sewerage)"
+    department_short: "Jal Board"
+  Waste:
+    department_full: "Solid Waste Management Department"
+    department_short: "SWM Dept."
+  Sanitation:
+    department_full: "Sewerage and Drainage Board"
+    department_short: "Sewerage Board"
+  Electricity:
+    department_full: "Discom (Power Distribution Company)"
+    department_short: "Discom"
+  Health:
+    department_full: "District Health Department"
+    department_short: "Health Dept."
+  "Other / Unknown":
+    department_full: "General Administration (human review)"
+    department_short: "Human review"
+
+priorities:
+  High:
+    meaning: "danger, sparking, overflow into home, dengue cluster, accident, outage + safety risk"
+    sla_hours: 48
+  Medium:
+    meaning: "leak, blocked drain, delayed collection, fluctuations"
+    sla_hours: 168
+  Low:
+    meaning: "suggestion, minor crack, FYI"
+    sla_hours: 336
+
+routing:
+  # needs_human = true when top1 domain score - top2 domain score < margin_threshold
+  domain_margin_threshold: 0.08
+  # needs_human = true when min(domain_conf, priority_conf) < abstain_threshold
+  abstain_threshold: 0.45

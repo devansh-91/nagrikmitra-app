@@ -1,0 +1,13 @@
+scikit-learn
+pandas
+numpy
+joblib
+pyyaml
+fastapi
+uvicorn[standard]
+streamlit
+python-dotenv
+requests
+pytest
+# Optional LLM clients (import-guarded; app must run without them / without a key):
+groq

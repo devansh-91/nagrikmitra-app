@@ -1,0 +1,33 @@
+{
+  "_comment": "Populated by nagrikmitra/train.py. Real numbers from a held-out test split.",
+  "domain_head": {
+    "test_accuracy": 0.9944,
+    "test_macro_f1": 0.9944
+  },
+  "priority_head": {
+    "test_accuracy": 0.9889,
+    "test_macro_f1": 0.989
+  },
+  "keyword_baseline": {
+    "domain_accuracy": 0.7333
+  },
+  "language_slices": {
+    "en": {
+      "domain_accuracy": 1.0,
+      "priority_accuracy": 1.0
+    },
+    "hi": {
+      "domain_accuracy": 0.9821,
+      "priority_accuracy": 0.9643
+    },
+    "hinglish": {
+      "domain_accuracy": 1.0,
+      "priority_accuracy": 1.0
+    }
+  },
+  "high_priority_recall": 1.0,
+  "n_train": 840,
+  "n_val": 180,
+  "n_test": 180,
+  "disclaimer": "Synthetic complaint templates tend to be memorized; treat these numbers as indicative, not a real-world benchmark. Never quote 100% as a production F1."
+}
