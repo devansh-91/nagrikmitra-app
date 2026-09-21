@@ -5,12 +5,16 @@ Responsibilities:
 - data/nagrikmitra.db (gitignored, created on first run).
 - Tables: tickets (id, text, language, domain, department, priority,
   confidence, needs_human, sla_hours, due_at, source, channel, created_at,
-  status), overrides (id, ticket_id, old_domain, old_priority, new_domain,
+  status, name, location, portal_name, portal_reference, portal_status),
+  overrides (id, ticket_id, old_domain, old_priority, new_domain,
   new_priority, reason, actor, created_at).
 - save_ticket(...) -> ticket_id
 - list_tickets(filters) -> list[dict]
 - override_ticket(ticket_id, new_domain, new_priority, reason, actor) ->
   writes an audit row AND recomputes/updates due_at from the new priority's SLA.
+- set_portal_submission(ticket_id, portal_name, portal_reference, portal_status)
+  -> records the outcome of forwarding a ticket to a (simulated) gov portal
+  adapter (see gov_portal.py — no real portal is ever contacted).
 """
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -58,6 +62,9 @@ CREATE TABLE IF NOT EXISTS overrides (
 _MIGRATIONS = [
     "ALTER TABLE tickets ADD COLUMN name TEXT",
     "ALTER TABLE tickets ADD COLUMN location TEXT",
+    "ALTER TABLE tickets ADD COLUMN portal_name TEXT",
+    "ALTER TABLE tickets ADD COLUMN portal_reference TEXT",
+    "ALTER TABLE tickets ADD COLUMN portal_status TEXT",
 ]
 
 STATUSES = ["New", "In Progress", "Resolved"]
@@ -269,6 +276,32 @@ def update_status(ticket_id: int, status: str) -> dict:
             return None
         conn.execute(
             "UPDATE tickets SET status = ? WHERE id = ?", (status, ticket_id)
+        )
+        conn.commit()
+        updated = conn.execute(
+            "SELECT * FROM tickets WHERE id = ?", (ticket_id,)
+        ).fetchone()
+        return dict(updated)
+    finally:
+        conn.close()
+
+
+def set_portal_submission(
+    ticket_id: int, portal_name: str, portal_reference: str, portal_status: str
+) -> dict:
+    """Record the outcome of forwarding a ticket to a (simulated) government
+    portal adapter. Returns the updated ticket, or None if it doesn't exist."""
+    init_db()
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "SELECT id FROM tickets WHERE id = ?", (ticket_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        conn.execute(
+            "UPDATE tickets SET portal_name = ?, portal_reference = ?, portal_status = ? WHERE id = ?",
+            (portal_name, portal_reference, portal_status, ticket_id),
         )
         conn.commit()
         updated = conn.execute(

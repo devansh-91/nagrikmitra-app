@@ -259,6 +259,17 @@ function ResultCard({result,onReset}){
       <i className="fas fa-building-columns text-saffron-500"></i>
       <span>Full Department: <strong className="text-navy-800">{result.department}</strong></span>
     </div>
+    {result.portal_reference&&<div className="mb-4 bg-navy-50 border border-navy-100 rounded-xl p-3">
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-[10px] uppercase tracking-wider text-navy-500 font-semibold flex items-center gap-1.5"><i className="fas fa-landmark-flag text-navy-400"></i>Government Portal</span>
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-700" title="No real government portal is contacted — this reference is generated locally for demo purposes only.">
+          <i className="fas fa-flask"></i>SIMULATED
+        </span>
+      </div>
+      <p className="text-sm text-navy-800"><strong>{result.portal_name}</strong> · {result.portal_status}</p>
+      <p className="text-xs text-gray-500 font-mono mt-0.5">Ref: {result.portal_reference}</p>
+      <p className="text-[11px] text-gray-400 mt-1.5">{result.portal_note}</p>
+    </div>}
     {result.domain_top3&&result.priority_top3&&<details className="mb-3 bg-gray-50 rounded-xl border border-gray-100 overflow-hidden group">
       <summary className="px-4 py-2.5 cursor-pointer text-xs font-bold text-navy-700 flex items-center gap-2"><i className="fas fa-circle-info text-saffron-500"></i>Why this classification?<i className="fas fa-chevron-down text-gray-400 ml-auto transition-transform group-open:rotate-180 text-[10px]"></i></summary>
       <div className="px-4 pb-4 pt-1 text-xs grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -487,7 +498,7 @@ function DashboardView({complaints,loading,onChanged}){
       <div className="overflow-x-auto">
         <table className="w-full min-w-[900px]">
           <thead><tr className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-gray-50">
-            <th className="px-4 py-3">ID</th><th className="px-4 py-3">Complaint</th><th className="px-4 py-3">Lang</th><th className="px-4 py-3">Domain</th><th className="px-4 py-3">Priority</th><th className="px-4 py-3">Department</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">SLA</th><th className="px-4 py-3">Submitted</th>
+            <th className="px-4 py-3">ID</th><th className="px-4 py-3">Complaint</th><th className="px-4 py-3">Lang</th><th className="px-4 py-3">Domain</th><th className="px-4 py-3">Priority</th><th className="px-4 py-3">Department</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Portal (Simulated)</th><th className="px-4 py-3">SLA</th><th className="px-4 py-3">Submitted</th>
           </tr></thead>
           <tbody>{filtered.map(c=>{
             const sla=slaRemaining(c);
@@ -504,6 +515,9 @@ function DashboardView({complaints,loading,onChanged}){
                 <select value={c.status} disabled={updatingId===c.id} onChange={e=>updateStatus(c.id,e.target.value)} className={`text-[10px] font-bold px-2 py-1 rounded-full border cursor-pointer transition-colors disabled:opacity-50 ${(statusMeta[c.status]||statusMeta.New).bg} ${(statusMeta[c.status]||statusMeta.New).text} border-transparent focus:ring-1 focus:ring-saffron-300`}>
                   {STATUS_OPTIONS.map(s=><option key={s} value={s}>{s}</option>)}
                 </select>
+              </td>
+              <td className="px-4 py-3 text-xs">
+                {c.portal_reference?<span className="text-gray-600 font-mono" title={`${c.portal_name} · ${c.portal_status}`}>{c.portal_reference}</span>:<span className="text-gray-300">—</span>}
               </td>
               <td className="px-4 py-3"><span className={`text-xs font-bold ${sla.expired?'text-red-600':'text-gray-600'}`}>{sla.expired&&<i className="fas fa-exclamation-circle mr-1"></i>}{sla.text}</span></td>
               <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">{timeAgo(c.created_at)}</td>

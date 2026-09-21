@@ -10,7 +10,8 @@ Endpoints (per spec section 7):
        -> { language, normalized_text, domain, department, priority,
             confidence, needs_human, sla_hours, suggested_reply,
             template_reply, source, llm_backend, llm_error, similar,
-            explain, domain_top3, priority_top3, ticket_id }
+            explain, domain_top3, priority_top3, ticket_id,
+            portal_name, portal_reference, portal_status, portal_note }
 
   GET  /tickets            (filterable: domain, priority, language, needs_human, status)
   POST /tickets/{id}/override
@@ -25,6 +26,11 @@ Endpoints (per spec section 7):
 sklearn always runs and owns domain/priority decisions; the LLM (Groq/Ollama,
 optional) only polishes the template reply text and can never change routing.
 
+When a complaint is persisted, it is also forwarded to gov_portal's
+MockGovPortalAdapter — a SIMULATED per-domain government portal (see
+gov_portal.py). No real CPGRAMS or department portal is ever contacted; the
+portal_* response fields and portal_note make that explicit.
+
 GET "/" and any unmatched path serve frontend/index.html (the citizen/officer
 web UI), which talks to the API above via same-origin fetch calls.
 """
@@ -37,6 +43,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from gov_portal import MockGovPortalAdapter, PortalSubmissionError
 from nagrikmitra import store
 from nagrikmitra.config import BASE_DIR, GROQ_API_KEY, GROQ_MODEL, OLLAMA_MODEL
 from nagrikmitra.explain import explain_prediction
@@ -45,6 +52,8 @@ from nagrikmitra.predict import load_models, predict
 from nagrikmitra.reply import render_template
 from nagrikmitra.similar import similar_tickets
 from nagrikmitra.store import STATUSES
+
+_gov_portal = MockGovPortalAdapter()
 
 
 @asynccontextmanager
@@ -135,6 +144,7 @@ def do_predict(req: PredictRequest):
     similar = similar_tickets(req.text, top_k=5)
 
     ticket_id = None
+    portal_name = portal_reference = portal_status = portal_note = None
     if req.persist:
         ticket_id = store.save_ticket(
             text=req.text,
@@ -150,6 +160,18 @@ def do_predict(req: PredictRequest):
             name=req.name,
             location=req.location,
         )
+
+        # Forward to the SIMULATED per-domain government portal adapter (see
+        # gov_portal.py) — no real portal is contacted, ever.
+        try:
+            portal_result = _gov_portal.submit(store.get_ticket(ticket_id))
+            portal_name = portal_result["portal"]
+            portal_reference = portal_result["portal_reference"]
+            portal_status = "Submitted (Simulated)"
+            portal_note = portal_result["note"]
+            store.set_portal_submission(ticket_id, portal_name, portal_reference, portal_status)
+        except PortalSubmissionError as e:
+            portal_status = f"Not submitted (Simulated): {e}"
 
     return {
         "ticket_id": ticket_id,
@@ -170,6 +192,10 @@ def do_predict(req: PredictRequest):
         "explain": explain,
         "domain_top3": result["domain_top3"],
         "priority_top3": result["priority_top3"],
+        "portal_name": portal_name,
+        "portal_reference": portal_reference,
+        "portal_status": portal_status,
+        "portal_note": portal_note,
     }
 
 

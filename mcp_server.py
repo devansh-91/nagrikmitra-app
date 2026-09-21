@@ -28,7 +28,7 @@ from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
 
-from gov_portal import MockGovPortalAdapter, PortalSubmissionError
+from gov_portal import MockGovPortalAdapter, PortalSubmissionError, portal_for_domain
 from nagrikmitra import store
 from nagrikmitra.llm import polish
 from nagrikmitra.predict import predict
@@ -81,6 +81,7 @@ def classify_complaint(
             suggested_reply, source = polished_text, "llm"
 
     ticket_id = None
+    portal_name = portal_reference = portal_status = None
     if persist:
         ticket_id = store.save_ticket(
             text=text,
@@ -96,6 +97,16 @@ def classify_complaint(
             name=name,
             location=location,
         )
+        # Forward to the SIMULATED per-domain government portal adapter (see
+        # gov_portal.py) — no real portal is contacted, ever.
+        try:
+            portal_result = _gov_portal.submit(store.get_ticket(ticket_id))
+            portal_name = portal_result["portal"]
+            portal_reference = portal_result["portal_reference"]
+            portal_status = "Submitted (Simulated)"
+            store.set_portal_submission(ticket_id, portal_name, portal_reference, portal_status)
+        except PortalSubmissionError as e:
+            portal_status = f"Not submitted (Simulated): {e}"
 
     return {
         "ticket_id": ticket_id,
@@ -114,6 +125,9 @@ def classify_complaint(
         "domain_top3": result["domain_top3"],
         "priority_top3": result["priority_top3"],
         "similar": similar_tickets(text, top_k=5),
+        "portal_name": portal_name,
+        "portal_reference": portal_reference,
+        "portal_status": portal_status,
     }
 
 
@@ -212,21 +226,32 @@ def get_analytics() -> dict:
 
 
 @mcp.tool()
-def submit_to_gov_portal(ticket_id: int, portal: str = "CPGRAMS") -> dict:
-    """Forward a locally logged ticket to an external government grievance
-    portal. NOT connected to a real portal: no public submission API for
-    CPGRAMS or state/municipal portals was found, and their citizen forms are
-    CAPTCHA/OTP-gated specifically against automated filing. This calls a
-    MockGovPortalAdapter that simulates the round trip for demo purposes and
-    never contacts any live government system. See gov_portal.py to wire in a
-    real adapter once you hold an actual API credential for that portal."""
+def submit_to_gov_portal(ticket_id: int, portal: Optional[str] = None) -> dict:
+    """Forward a locally logged ticket to a government grievance portal.
+    NOT connected to any real portal: no public submission API for CPGRAMS or
+    state/municipal portals was found, and their citizen forms are CAPTCHA/
+    OTP-gated specifically against automated filing. This calls
+    MockGovPortalAdapter, which simulates the round trip (one simulated
+    portal per domain, e.g. "e-PWD Grievance Portal" for Roads — see
+    gov_portal.PORTAL_BY_DOMAIN) and never contacts any live government
+    system. Persists the simulated reference/status onto the ticket. See
+    gov_portal.py to wire in a real adapter once you hold an actual API
+    credential for that portal."""
     ticket = store.get_ticket(ticket_id)
     if ticket is None:
         raise ValueError(f"ticket {ticket_id} not found")
     try:
-        return _gov_portal.submit(ticket, portal=portal)
+        result = _gov_portal.submit(ticket, portal=portal)
+        store.set_portal_submission(
+            ticket_id, result["portal"], result["portal_reference"], "Submitted (Simulated)"
+        )
+        return result
     except PortalSubmissionError as e:
-        return {"submitted": False, "portal": portal, "error": str(e)}
+        resolved_portal = portal or portal_for_domain(ticket.get("domain"))
+        store.set_portal_submission(
+            ticket_id, resolved_portal, None, f"Not submitted (Simulated): {e}"
+        )
+        return {"submitted": False, "portal": resolved_portal, "error": str(e)}
 
 
 if __name__ == "__main__":
