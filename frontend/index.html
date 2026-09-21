@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nagarik Mitra — Civic Grievance Routing</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Noto+Sans:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+tailwind.config={theme:{extend:{colors:{navy:{50:'#eef1f8',100:'#d8dfe9',200:'#b3bfda',300:'#8a9bc4',400:'#6178ae',500:'#3f578f',600:'#2d3f63',700:'#1f2e4d',800:'#1a2744',900:'#111c33',950:'#0a1120'},saffron:{50:'#fff7ed',100:'#ffedd5',200:'#fed7aa',300:'#fdba74',400:'#fb923c',500:'#E8751A',600:'#c2410c',700:'#9a3412'},civic:{green:'#1B7A6E','green-light':'#eefbf9'}},fontFamily:{display:['Outfit','sans-serif'],body:['"Noto Sans"','"Noto Sans Devanagari"','sans-serif']}}}}
+</script>
+<style>
+*{scrollbar-width:thin;scrollbar-color:#cbd5e1 transparent}
+body{background:#F0F3F8}
+.header-bg{background:linear-gradient(135deg,#0a1120 0%,#1a2744 40%,#1f2e4d 70%,#1a2744 100%);background-size:200% 200%;animation:gradShift 10s ease infinite}
+@keyframes gradShift{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes pulseGlow{0%,100%{box-shadow:0 0 8px rgba(232,117,26,.15)}50%{box-shadow:0 0 24px rgba(232,117,26,.35)}}
+@keyframes fillLine{from{transform:scaleX(0);transform-origin:left}to{transform:scaleX(1);transform-origin:left}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.anim-slide-up{animation:slideUp .5s ease-out both}
+.anim-fade-in{animation:fadeIn .4s ease-out both}
+.anim-pulse-glow{animation:pulseGlow 1.5s ease-in-out infinite}
+.anim-fill-line{animation:fillLine .6s ease-out both}
+.dot-bg{background-image:radial-gradient(circle at 1px 1px,rgba(0,0,0,.025) 1px,transparent 0);background-size:20px 20px}
+select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;-webkit-appearance:none;appearance:none;padding-right:28px}
+@media(prefers-reduced-motion:reduce){*{animation-duration:0s!important;transition-duration:0s!important}}
+</style>
+</head>
+<body class="font-body min-h-screen dot-bg">
+<div id="root"></div>
+<script type="text/babel">
+const{useState,useEffect,useRef,useCallback}=React;
+const delay=ms=>new Promise(r=>setTimeout(r,ms));
+
+/* ===== API LAYER =====
+   Same-origin FastAPI backend (api.py). Empty base = relative paths, which
+   works whether this page is served by uvicorn directly (mounted at "/")
+   or from a different static host pointed at the same API via window.API_BASE. */
+const API_BASE = (typeof window!=='undefined'&&window.API_BASE)||'';
+
+async function apiRequest(path,options){
+  let res;
+  try{
+    res=await fetch(`${API_BASE}${path}`,options);
+  }catch(networkErr){
+    throw new Error('Cannot reach the Nagarik Mitra API. Is the server running?');
+  }
+  if(!res.ok){
+    let detail=res.statusText;
+    try{const body=await res.json();if(body&&body.detail)detail=body.detail;}catch(_){}
+    throw new Error(detail);
+  }
+  return res.json();
+}
+const apiHealth=()=>apiRequest('/health');
+const apiPredict=payload=>apiRequest('/predict',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+const apiListTickets=()=>apiRequest('/tickets');
+const apiUpdateStatus=(id,status)=>apiRequest(`/tickets/${id}/status`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});
+
+/* ===== TAXONOMY (mirrors config/taxonomy.yaml) ===== */
+const OTHER_DOMAIN='Other / Unknown';
+const STATUS_OPTIONS=['New','In Progress','Resolved'];
+
+const domainMeta={
+  Roads:{icon:'fa-road',bg:'bg-blue-100',text:'text-blue-700',chart:'#3B82F6',short:'PWD'},
+  Lights:{icon:'fa-lightbulb',bg:'bg-amber-100',text:'text-amber-700',chart:'#F59E0B',short:'Municipal Corp.'},
+  Water:{icon:'fa-droplet',bg:'bg-cyan-100',text:'text-cyan-700',chart:'#06B6D4',short:'Jal Board'},
+  Waste:{icon:'fa-trash-can',bg:'bg-purple-100',text:'text-purple-700',chart:'#8B5CF6',short:'SWM Dept.'},
+  Sanitation:{icon:'fa-faucet-drip',bg:'bg-gray-200',text:'text-gray-700',chart:'#6B7280',short:'Sewerage Board'},
+  Electricity:{icon:'fa-bolt',bg:'bg-red-100',text:'text-red-700',chart:'#EF4444',short:'Discom'},
+  Health:{icon:'fa-heart-pulse',bg:'bg-emerald-100',text:'text-emerald-700',chart:'#10B981',short:'Health Dept.'},
+  [OTHER_DOMAIN]:{icon:'fa-circle-question',bg:'bg-slate-200',text:'text-slate-700',chart:'#94A3B8',short:'Human review'}
+};
+const priorityMeta={
+  Low:{bg:'bg-green-100',text:'text-green-700'},
+  Medium:{bg:'bg-amber-100',text:'text-amber-700'},
+  High:{bg:'bg-red-100',text:'text-red-700'}
+};
+// API returns language as a code (hi/en/hinglish/other); map to display labels.
+const langDisplay={hi:'Hindi',en:'English',hinglish:'Hinglish',other:'Other'};
+const langMeta={
+  Hindi:{bg:'bg-orange-100',text:'text-orange-700'},
+  English:{bg:'bg-sky-100',text:'text-sky-700'},
+  Hinglish:{bg:'bg-violet-100',text:'text-violet-700'},
+  Other:{bg:'bg-gray-100',text:'text-gray-600'}
+};
+const statusMeta={
+  'New':{bg:'bg-blue-100',text:'text-blue-700'},
+  'In Progress':{bg:'bg-amber-100',text:'text-amber-700'},
+  'Resolved':{bg:'bg-green-100',text:'text-green-700'}
+};
+
+/* ===== HELPERS ===== */
+// created_at/due_at come from Python's datetime.utcnow().isoformat() — naive
+// UTC with no "Z" suffix. Append it before parsing so the browser treats it
+// as UTC instead of local time.
+function parseUTC(iso){
+  if(!iso)return null;
+  const d=new Date(iso.endsWith('Z')?iso:iso+'Z');
+  return isNaN(d.getTime())?null:d;
+}
+function timeAgo(iso){
+  const d=parseUTC(iso);
+  if(!d)return'—';
+  const s=Math.floor((Date.now()-d.getTime())/1000);
+  if(s<60)return'Just now';
+  const m=Math.floor(s/60);if(m<60)return m+'m ago';
+  const h=Math.floor(m/60);if(h<24)return h+'h ago';
+  const dd=Math.floor(h/24);return dd+'d ago';
+}
+function slaRemaining(c){
+  if(c.status==='Resolved')return{text:'Resolved',expired:false};
+  const due=parseUTC(c.due_at);
+  if(!due)return{text:'—',expired:false};
+  const rem=due.getTime()-Date.now();
+  if(rem<=0)return{text:'Expired',expired:true};
+  const h=Math.floor(rem/3600000),m=Math.floor((rem%3600000)/60000);
+  return{text:h+'h '+m+'m',expired:false};
+}
+
+/* ===== SMALL COMPONENTS ===== */
+function Badge({label,meta}){
+  const m=meta||langMeta.Other;
+  return<span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${m.bg} ${m.text}`}>{label}</span>;
+}
+
+function Toast({message,visible,tone}){
+  const isError=tone==='error';
+  return<div className={`fixed top-5 right-5 z-50 transition-all duration-500 max-w-sm ${visible?'translate-x-0 opacity-100':'translate-x-8 opacity-0 pointer-events-none'}`}>
+    <div className={`${isError?'bg-red-600':'bg-civic-green'} text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-2 font-medium text-sm`}>
+      <i className={`fas ${isError?'fa-triangle-exclamation':'fa-circle-check'}`}></i>{message}
+    </div>
+  </div>;
+}
+
+function ErrorBanner({message}){
+  if(!message)return null;
+  return<div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 flex items-center gap-2">
+    <i className="fas fa-triangle-exclamation flex-shrink-0"></i><span>{message}</span>
+  </div>;
+}
+
+/* ===== PIPELINE ANIMATION =====
+   The classification itself is one round-trip to POST /predict (sklearn
+   TF-IDF + Logistic Regression, per README). Steps below stagger the
+   REAL response fields into view for legibility, they don't re-run
+   separate models client-side. */
+const pipeSteps=[
+  {icon:'fa-globe',label:'Language Detection',model:'Script + Lexicon Detector',key:'language'},
+  {icon:'fa-align-left',label:'Text Normalization',model:'Rule-based Cleaner',key:'normalized'},
+  {icon:'fa-tags',label:'Domain Classification',model:'TF-IDF + LogisticRegression',key:'domain'},
+  {icon:'fa-gauge-high',label:'Priority Scoring',model:'TF-IDF + LogisticRegression',key:'priority'},
+  {icon:'fa-route',label:'Dept. Routing',model:'Taxonomy Lookup',key:'department'}
+];
+
+function ConnectorLine({active}){
+  return<div className="flex-shrink-0 w-8 md:w-14 h-0.5 mt-5 rounded bg-gray-200 relative overflow-hidden">
+    {active&&<div className="absolute inset-0 bg-gradient-to-r from-saffron-500 to-civic-green anim-fill-line rounded"></div>}
+  </div>;
+}
+
+function PipelineStep({step,idx,currentStep,result}){
+  const st=idx<currentStep?'complete':idx===currentStep?'active':'pending';
+  const ring=st==='active'?'border-saffron-500 anim-pulse-glow shadow-lg':st==='complete'?'border-civic-green bg-civic-green-light':'border-gray-200 bg-gray-50 opacity-50';
+  const iconColor=st==='complete'?'text-civic-green':st==='active'?'text-saffron-500':'text-gray-400';
+  const iconBg=st==='complete'?'bg-civic-green/10':st==='active'?'bg-saffron-50':'bg-gray-100';
+  return<div className={`flex-shrink-0 w-32 md:w-40 p-3 rounded-xl border-2 transition-all duration-500 ${ring}`}>
+    <div className="flex items-center justify-center mb-1.5">
+      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${iconBg} transition-colors duration-500`}>
+        {st==='complete'?<i className="fas fa-check text-sm"></i>:<i className={`fas ${step.icon} text-sm ${iconColor}`}></i>}
+      </div>
+    </div>
+    <p className="text-[11px] font-bold text-navy-800 text-center leading-tight mb-0.5">{step.label}</p>
+    <p className="text-[9px] text-gray-400 text-center mb-2">{step.model}</p>
+    {result!==undefined&&<div className="bg-white/70 rounded-lg p-1.5 anim-fade-in">
+      <p className="text-[11px] font-semibold text-navy-700 text-center leading-snug break-words">{result}</p>
+    </div>}
+  </div>;
+}
+
+function PipelineView({step,results}){
+  return<div className="anim-slide-up">
+    <div className="flex items-center gap-2 mb-4">
+      <i className="fas fa-microchip text-saffron-500"></i>
+      <h3 className="font-display font-bold text-navy-800">Classification Pipeline</h3>
+    </div>
+    <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden mb-6">
+      <div className="h-full bg-gradient-to-r from-saffron-500 via-amber-400 to-civic-green rounded-full transition-all duration-700 ease-out" style={{width:`${Math.min((step/5)*100,100)}%`}}></div>
+    </div>
+    <div className="overflow-x-auto pb-4 -mx-2 px-2">
+      <div className="flex items-start justify-between min-w-[740px] gap-0">
+        {pipeSteps.map((s,i)=><React.Fragment key={i}>
+          {i>0&&<ConnectorLine active={i<=step}/>}
+          <PipelineStep step={s} idx={i} currentStep={step} result={results[s.key]}/>
+        </React.Fragment>)}
+      </div>
+    </div>
+  </div>;
+}
+
+/* ===== RESULT CARD ===== */
+function ProbList({items,color}){
+  return<div>{items.map(([label,p],i)=>
+    <div key={i} className="flex items-center gap-2 mb-1.5">
+      <span className="w-28 truncate text-gray-600">{label}</span>
+      <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{width:`${p*100}%`,background:color}}></div></div>
+      <span className="w-10 text-right text-gray-500">{(p*100).toFixed(0)}%</span>
+    </div>
+  )}</div>;
+}
+
+function ResultCard({result,onReset}){
+  const dm=domainMeta[result.domain]||domainMeta[OTHER_DOMAIN];
+  const pm=priorityMeta[result.priority]||priorityMeta.Medium;
+  const langLabel=langDisplay[result.language]||'Other';
+  const lm=langMeta[langLabel]||langMeta.Other;
+  return<div className="mt-6 bg-white rounded-2xl shadow-lg border border-gray-100 p-6 anim-slide-up">
+    <div className="flex items-center gap-3 mb-5">
+      <div className="w-10 h-10 rounded-full bg-civic-green/10 flex items-center justify-center"><i className="fas fa-check-circle text-civic-green text-lg"></i></div>
+      <div>
+        <h3 className="font-display font-bold text-lg text-navy-800">Complaint Classified &amp; Routed</h3>
+        <p className="text-sm text-gray-500">{result.ticket_id?`Ticket #${result.ticket_id} logged and assigned to the relevant department`:'Processed, but not saved to the inbox'}</p>
+      </div>
+    </div>
+    {result.needs_human&&<div className="mb-4 bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl px-4 py-3 flex items-center gap-2">
+      <i className="fas fa-user-check"></i>Low classifier confidence — this complaint has been flagged for human review.
+    </div>}
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+      {[{l:'Language',v:langLabel,m:lm},{l:'Domain',v:result.domain,m:dm},{l:'Priority',v:result.priority,m:pm},{l:'Department',v:dm.short,m:null},{l:'SLA Target',v:result.sla_hours+'h',m:null}].map((item,i)=>
+        <div key={i} className="bg-gray-50 rounded-xl p-3 text-center">
+          <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-1">{item.l}</p>
+          {item.m?<Badge label={item.v} meta={item.m}/>:<p className="text-sm font-bold text-navy-800">{item.v}</p>}
+        </div>
+      )}
+    </div>
+    <div className="bg-navy-50 rounded-xl p-3 mb-4">
+      <div className="flex items-center gap-2 mb-1"><span className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Confidence Score</span>
+        <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{width:`${result.confidence*100}%`,background:result.confidence>.8?'#1B7A6E':result.confidence>.6?'#F59E0B':'#EF4444'}}></div></div>
+        <span className="text-xs font-bold text-navy-800">{(result.confidence*100).toFixed(0)}%</span>
+      </div>
+    </div>
+    <div className="bg-gray-50 rounded-xl p-3 mb-4">
+      <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-1">Normalized Text (preprocessing output)</p>
+      <p className="text-sm text-gray-700 leading-relaxed">{result.normalized_text}</p>
+    </div>
+    <div className="bg-civic-green-light rounded-xl p-3 mb-4">
+      <p className="text-[10px] uppercase tracking-wider text-civic-green font-semibold mb-1">Drafted Acknowledgment {result.source==='llm'?'(LLM-polished)':'(template)'}</p>
+      <p className="text-sm text-navy-800 leading-relaxed">{result.suggested_reply}</p>
+      {result.llm_error&&<p className="text-[11px] text-amber-600 mt-1"><i className="fas fa-circle-info mr-1"></i>LLM polish unavailable ({result.llm_error}); showing the template reply.</p>}
+    </div>
+    <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
+      <i className="fas fa-building-columns text-saffron-500"></i>
+      <span>Full Department: <strong className="text-navy-800">{result.department}</strong></span>
+    </div>
+    {result.domain_top3&&result.priority_top3&&<details className="mb-3 bg-gray-50 rounded-xl border border-gray-100 overflow-hidden group">
+      <summary className="px-4 py-2.5 cursor-pointer text-xs font-bold text-navy-700 flex items-center gap-2"><i className="fas fa-circle-info text-saffron-500"></i>Why this classification?<i className="fas fa-chevron-down text-gray-400 ml-auto transition-transform group-open:rotate-180 text-[10px]"></i></summary>
+      <div className="px-4 pb-4 pt-1 text-xs grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div><p className="font-semibold text-gray-500 mb-2">Domain scores</p><ProbList items={result.domain_top3} color="#E8751A"/></div>
+        <div><p className="font-semibold text-gray-500 mb-2">Priority scores</p><ProbList items={result.priority_top3} color="#1B7A6E"/></div>
+      </div>
+    </details>}
+    {result.similar&&result.similar.length>0&&<details className="mb-4 bg-gray-50 rounded-xl border border-gray-100 overflow-hidden group">
+      <summary className="px-4 py-2.5 cursor-pointer text-xs font-bold text-navy-700 flex items-center gap-2"><i className="fas fa-layer-group text-saffron-500"></i>Similar past complaints<i className="fas fa-chevron-down text-gray-400 ml-auto transition-transform group-open:rotate-180 text-[10px]"></i></summary>
+      <ul className="px-4 pb-4 pt-1 text-xs text-gray-600 space-y-1.5">
+        {result.similar.map(s=><li key={s.id} className="flex gap-2"><span className="text-gray-400 flex-shrink-0 font-mono">[{s.domain} · {(s.score*100).toFixed(0)}%]</span><span className="truncate">{s.text}</span></li>)}
+      </ul>
+    </details>}
+    <button onClick={onReset} className="px-6 py-2.5 bg-navy-800 text-white rounded-xl font-display font-semibold hover:bg-navy-700 transition-colors"><i className="fas fa-plus mr-2"></i>Submit Another Complaint</button>
+  </div>;
+}
+
+/* ===== SUBMIT VIEW ===== */
+function SubmitView({onSubmitted}){
+  const[text,setText]=useState('');
+  const[name,setName]=useState('');
+  const[loc,setLoc]=useState('');
+  const[useLlm,setUseLlm]=useState(false);
+  const[pipeState,setPipeState]=useState('idle');
+  const[pipeStep,setPipeStep]=useState(0);
+  const[pipeResults,setPipeResults]=useState({});
+  const[result,setResult]=useState(null);
+  const[toast,setToast]=useState(false);
+  const[errorMsg,setErrorMsg]=useState(null);
+
+  const reset=()=>{setText('');setName('');setLoc('');setPipeState('idle');setPipeStep(0);setPipeResults({});setResult(null);setErrorMsg(null);};
+
+  const handleSubmit=async e=>{
+    e.preventDefault();
+    setErrorMsg(null);
+    setPipeState('running');setPipeStep(0);setPipeResults({});setResult(null);
+
+    let api;
+    try{
+      api=await apiPredict({text,name,location:loc,channel:'web',persist:true,use_llm:useLlm});
+    }catch(err){
+      setPipeState('idle');setPipeStep(0);setPipeResults({});
+      setErrorMsg(err.message||'Something went wrong contacting the API.');
+      return;
+    }
+
+    await delay(500);
+    setPipeResults(p=>({...p,language:langDisplay[api.language]||api.language}));setPipeStep(1);
+
+    await delay(500);
+    const norm=api.normalized_text||'';
+    setPipeResults(p=>({...p,normalized:norm.length>60?norm.slice(0,60)+'...':norm}));setPipeStep(2);
+
+    await delay(500);
+    const domainConf=api.domain_top3&&api.domain_top3.length?api.domain_top3[0][1]:api.confidence;
+    const domainLabel=api.needs_human?`${api.domain} (review)`:`${api.domain} (${Math.round(domainConf*100)}%)`;
+    setPipeResults(p=>({...p,domain:domainLabel}));setPipeStep(3);
+
+    await delay(500);
+    setPipeResults(p=>({...p,priority:`${api.priority} · ${api.sla_hours}h SLA`}));setPipeStep(4);
+
+    await delay(500);
+    const dm=domainMeta[api.domain]||domainMeta[OTHER_DOMAIN];
+    setPipeResults(p=>({...p,department:dm.short}));setPipeStep(5);
+
+    await delay(300);
+    setResult(api);setPipeState('complete');
+    setToast(true);setTimeout(()=>setToast(false),3000);
+    onSubmitted();
+  };
+
+  return<div className="max-w-3xl mx-auto space-y-6">
+    <Toast message="Complaint submitted and routed successfully!" visible={toast}/>
+    {errorMsg&&<ErrorBanner message={errorMsg}/>}
+    <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-10 h-10 rounded-xl bg-saffron-50 flex items-center justify-center"><i className="fas fa-comment-dots text-saffron-500"></i></div>
+        <div><h2 className="font-display font-bold text-xl text-navy-800">File a Complaint</h2><p className="text-sm text-gray-500">Type in Hindi, English, or Hinglish — the classifier handles the rest</p></div>
+      </div>
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1.5">Complaint Description <span className="text-red-400">*</span></label>
+          <textarea className="w-full h-36 px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-saffron-200 focus:border-saffron-500 outline-none transition resize-none text-gray-800 placeholder-gray-400" placeholder="e.g., Mere area mein sadak bahut tooti hui hai gadda hai... / The road near my house has big potholes... / मेरे मोहल्ले में पानी नहीं आ रहा..." value={text} onChange={e=>setText(e.target.value)} required disabled={pipeState!=='idle'}/>
+          <p className="mt-1 text-xs text-gray-400">Supports Devanagari script, English, and Romanized Hindi (Hinglish)</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div><label className="block text-sm font-semibold text-gray-700 mb-1.5">Your Name</label><input type="text" className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-saffron-200 focus:border-saffron-500 outline-none transition text-gray-800 placeholder-gray-400" placeholder="Enter your name" value={name} onChange={e=>setName(e.target.value)} disabled={pipeState!=='idle'}/></div>
+          <div><label className="block text-sm font-semibold text-gray-700 mb-1.5">Location</label><input type="text" className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-saffron-200 focus:border-saffron-500 outline-none transition text-gray-800 placeholder-gray-400" placeholder="e.g., Sector 15, Lucknow" value={loc} onChange={e=>setLoc(e.target.value)} disabled={pipeState!=='idle'}/></div>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-gray-600 select-none">
+          <input type="checkbox" className="rounded border-gray-300 text-saffron-500 focus:ring-saffron-400" checked={useLlm} onChange={e=>setUseLlm(e.target.checked)} disabled={pipeState!=='idle'}/>
+          Ask AI to polish the acknowledgment reply (optional — falls back to the template if unavailable)
+        </label>
+        <button type="submit" disabled={!text.trim()||pipeState!=='idle'} className="w-full py-3.5 bg-navy-800 text-white font-display font-bold rounded-xl hover:bg-navy-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 text-sm">
+          {pipeState==='idle'?<><i className="fas fa-paper-plane"></i>Submit &amp; Classify Complaint</>:<><i className="fas fa-spinner" style={{animation:'spin 1s linear infinite'}}></i>Processing through classification pipeline...</>}
+        </button>
+      </div>
+    </form>
+    {(pipeState==='running'||pipeState==='complete')&&<div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100"><PipelineView step={pipeStep} results={pipeResults}/></div>}
+    {result&&<ResultCard result={result} onReset={reset}/>}
+    <details className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm group">
+      <summary className="px-5 py-3.5 cursor-pointer text-sm font-semibold text-navy-800 hover:bg-gray-50 transition flex items-center gap-2">
+        <i className="fas fa-circle-info text-saffron-500"></i>How does the classification pipeline work?
+        <i className="fas fa-chevron-down text-gray-400 ml-auto transition-transform group-open:rotate-180 text-xs"></i>
+      </summary>
+      <div className="px-5 pb-5 text-sm text-gray-600 space-y-3 border-t border-gray-100 pt-4">
+        <div className="flex gap-3"><span className="flex-shrink-0 w-6 h-6 rounded-full bg-saffron-50 text-saffron-600 flex items-center justify-center text-xs font-bold">1</span><div><strong className="text-navy-800">Language Detection</strong> — Devanagari-script detection plus a romanized-Hindi (Hinglish) lexicon match identifies Hindi, English, or Hinglish input.</div></div>
+        <div className="flex gap-3"><span className="flex-shrink-0 w-6 h-6 rounded-full bg-saffron-50 text-saffron-600 flex items-center justify-center text-xs font-bold">2</span><div><strong className="text-navy-800">Text Normalization</strong> — Unicode NFC normalization, URL/noise stripping, and whitespace cleanup, preserving Devanagari and Latin signal.</div></div>
+        <div className="flex gap-3"><span className="flex-shrink-0 w-6 h-6 rounded-full bg-saffron-50 text-saffron-600 flex items-center justify-center text-xs font-bold">3</span><div><strong className="text-navy-800">Domain Classification</strong> — A TF-IDF (1–2 gram) + Logistic Regression model categorizes the complaint into one of 7 civic domains, or "Other / Unknown" when confidence is too low.</div></div>
+        <div className="flex gap-3"><span className="flex-shrink-0 w-6 h-6 rounded-full bg-saffron-50 text-saffron-600 flex items-center justify-center text-xs font-bold">4</span><div><strong className="text-navy-800">Priority Scoring</strong> — A second TF-IDF + Logistic Regression head assigns Low / Medium / High priority with a fixed SLA (48h / 168h / 336h).</div></div>
+        <div className="flex gap-3"><span className="flex-shrink-0 w-6 h-6 rounded-full bg-saffron-50 text-saffron-600 flex items-center justify-center text-xs font-bold">5</span><div><strong className="text-navy-800">Department Routing</strong> — A frozen taxonomy lookup (<code>config/taxonomy.yaml</code>) maps the classified domain to its municipal department.</div></div>
+      </div>
+    </details>
+  </div>;
+}
+
+/* ===== DASHBOARD ===== */
+function StatCard({icon,label,value,color,sub}){
+  const cm={blue:'bg-blue-50 text-blue-600',red:'bg-red-50 text-red-600',amber:'bg-amber-50 text-amber-600',green:'bg-green-50 text-green-600',navy:'bg-navy-50 text-navy-600'};
+  return<div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+    <div className="flex items-start justify-between"><div><p className="text-sm text-gray-500 font-medium">{label}</p><p className="text-3xl font-display font-extrabold text-navy-800 mt-1">{value}</p>{sub&&<p className="text-xs text-gray-400 mt-1">{sub}</p>}</div><div className={`w-11 h-11 rounded-xl flex items-center justify-center ${cm[color]}`}><i className={`fas ${icon}`}></i></div></div>
+  </div>;
+}
+
+function DomainChart({data}){
+  const ref=useRef(null);const chart=useRef(null);
+  useEffect(()=>{
+    if(chart.current)chart.current.destroy();
+    const counts={};data.forEach(c=>{counts[c.domain]=(counts[c.domain]||0)+1});
+    const labels=Object.keys(counts),vals=Object.values(counts),colors=labels.map(l=>(domainMeta[l]||domainMeta[OTHER_DOMAIN]).chart);
+    chart.current=new Chart(ref.current,{type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:8,font:{size:10,family:'Noto Sans'},color:'#64748b'}}}}});
+    return()=>{if(chart.current)chart.current.destroy()};
+  },[data]);
+  return<div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100"><h3 className="font-display font-bold text-navy-800 mb-4 text-sm">By Domain</h3><div style={{height:220}}><canvas ref={ref}></canvas></div></div>;
+}
+function PriorityChart({data}){
+  const ref=useRef(null);const chart=useRef(null);
+  useEffect(()=>{
+    if(chart.current)chart.current.destroy();
+    const counts={High:0,Medium:0,Low:0};data.forEach(c=>{if(counts[c.priority]!==undefined)counts[c.priority]++});
+    chart.current=new Chart(ref.current,{type:'bar',data:{labels:['High','Medium','Low'],datasets:[{data:[counts.High,counts.Medium,counts.Low],backgroundColor:['#EF4444','#F59E0B','#10B981'],borderRadius:6,barThickness:40}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1,font:{size:10},color:'#94a3b8'},grid:{color:'#f1f5f9'}},x:{ticks:{font:{size:11,weight:'bold'},color:'#475569'},grid:{display:false}}}}});
+    return()=>{if(chart.current)chart.current.destroy()};
+  },[data]);
+  return<div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100"><h3 className="font-display font-bold text-navy-800 mb-4 text-sm">By Priority</h3><div style={{height:220}}><canvas ref={ref}></canvas></div></div>;
+}
+function StatusChart({data}){
+  const ref=useRef(null);const chart=useRef(null);
+  useEffect(()=>{
+    if(chart.current)chart.current.destroy();
+    const counts={New:0,'In Progress':0,Resolved:0};data.forEach(c=>{if(counts[c.status]!==undefined)counts[c.status]++});
+    chart.current=new Chart(ref.current,{type:'doughnut',data:{labels:['New','In Progress','Resolved'],datasets:[{data:[counts.New,counts['In Progress'],counts.Resolved],backgroundColor:['#3B82F6','#F59E0B','#10B981'],borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:8,font:{size:10,family:'Noto Sans'},color:'#64748b'}}}}});
+    return()=>{if(chart.current)chart.current.destroy()};
+  },[data]);
+  return<div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100"><h3 className="font-display font-bold text-navy-800 mb-4 text-sm">By Status</h3><div style={{height:220}}><canvas ref={ref}></canvas></div></div>;
+}
+
+function DashboardView({complaints,loading,onChanged}){
+  const[tick,setTick]=useState(0);
+  const[domFilter,setDomFilter]=useState('all');
+  const[priFilter,setPriFilter]=useState('all');
+  const[staFilter,setStaFilter]=useState('all');
+  const[updatingId,setUpdatingId]=useState(null);
+  const[actionError,setActionError]=useState(null);
+  useEffect(()=>{const iv=setInterval(()=>setTick(t=>t+1),1000);return()=>clearInterval(iv)},[]);
+
+  const total=complaints.length;
+  const highCount=complaints.filter(c=>c.priority==='High').length;
+  const newCount=complaints.filter(c=>c.status==='New').length;
+  const expiredCount=complaints.filter(c=>c.status!=='Resolved'&&slaRemaining(c).expired).length;
+
+  const filtered=complaints.filter(c=>{
+    if(domFilter!=='all'&&c.domain!==domFilter)return false;
+    if(priFilter!=='all'&&c.priority!==priFilter)return false;
+    if(staFilter!=='all'&&c.status!==staFilter)return false;
+    return true;
+  });
+
+  const updateStatus=async(id,s)=>{
+    setActionError(null);setUpdatingId(id);
+    try{
+      await apiUpdateStatus(id,s);
+      await onChanged();
+    }catch(e){
+      setActionError(e.message||'Could not update status.');
+    }finally{
+      setUpdatingId(null);
+    }
+  };
+
+  const selCls='text-xs font-medium px-3 py-2 border border-gray-200 rounded-lg bg-white text-gray-700 focus:ring-2 focus:ring-saffron-200 focus:border-saffron-500 outline-none transition';
+
+  return<div className="space-y-6">
+    {actionError&&<ErrorBanner message={actionError}/>}
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <StatCard icon='fa-clipboard-list' label='Total Complaints' value={total} color='navy' sub='All time'/>
+      <StatCard icon='fa-triangle-exclamation' label='High Priority' value={highCount} color='red' sub='Need attention'/>
+      <StatCard icon='fa-clock' label='Pending (New)' value={newCount} color='amber' sub='Awaiting action'/>
+      <StatCard icon='fa-hourglass-end' label='SLA Breached' value={expiredCount} color='red' sub='Overdue complaints'/>
+    </div>
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <DomainChart data={complaints}/>
+      <PriorityChart data={complaints}/>
+      <StatusChart data={complaints}/>
+    </div>
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="p-5 border-b border-gray-100">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <h3 className="font-display font-bold text-navy-800 text-lg">All Complaints</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <select value={domFilter} onChange={e=>setDomFilter(e.target.value)} className={selCls}>
+              <option value="all">All Domains</option>
+              {Object.keys(domainMeta).map(d=><option key={d} value={d}>{d}</option>)}
+            </select>
+            <select value={priFilter} onChange={e=>setPriFilter(e.target.value)} className={selCls}>
+              <option value="all">All Priorities</option>
+              {['High','Medium','Low'].map(p=><option key={p} value={p}>{p}</option>)}
+            </select>
+            <select value={staFilter} onChange={e=>setStaFilter(e.target.value)} className={selCls}>
+              <option value="all">All Status</option>
+              {STATUS_OPTIONS.map(s=><option key={s} value={s}>{s}</option>)}
+            </select>
+            <button onClick={onChanged} className={`${selCls} flex items-center gap-1.5 hover:bg-gray-50`}><i className="fas fa-rotate-right text-[10px]"></i>Refresh</button>
+          </div>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[900px]">
+          <thead><tr className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-gray-50">
+            <th className="px-4 py-3">ID</th><th className="px-4 py-3">Complaint</th><th className="px-4 py-3">Lang</th><th className="px-4 py-3">Domain</th><th className="px-4 py-3">Priority</th><th className="px-4 py-3">Department</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">SLA</th><th className="px-4 py-3">Submitted</th>
+          </tr></thead>
+          <tbody>{filtered.map(c=>{
+            const sla=slaRemaining(c);
+            const dm=domainMeta[c.domain]||domainMeta[OTHER_DOMAIN];
+            const langLabel=langDisplay[c.language]||'Other';
+            return<tr key={c.id} className="border-t border-gray-50 hover:bg-gray-50/50 transition-colors">
+              <td className="px-4 py-3 text-xs font-mono text-gray-400">#{c.id}{!!c.needs_human&&<i className="fas fa-flag text-amber-400 ml-1.5" title="Flagged for human review"></i>}</td>
+              <td className="px-4 py-3 text-sm text-gray-700 max-w-[200px] truncate" title={c.text}>{c.text}</td>
+              <td className="px-4 py-3"><Badge label={langLabel} meta={langMeta[langLabel]}/></td>
+              <td className="px-4 py-3"><Badge label={c.domain} meta={dm}/></td>
+              <td className="px-4 py-3"><Badge label={c.priority} meta={priorityMeta[c.priority]}/></td>
+              <td className="px-4 py-3 text-xs text-gray-600 max-w-[150px] truncate" title={c.department}>{dm.short}</td>
+              <td className="px-4 py-3">
+                <select value={c.status} disabled={updatingId===c.id} onChange={e=>updateStatus(c.id,e.target.value)} className={`text-[10px] font-bold px-2 py-1 rounded-full border cursor-pointer transition-colors disabled:opacity-50 ${(statusMeta[c.status]||statusMeta.New).bg} ${(statusMeta[c.status]||statusMeta.New).text} border-transparent focus:ring-1 focus:ring-saffron-300`}>
+                  {STATUS_OPTIONS.map(s=><option key={s} value={s}>{s}</option>)}
+                </select>
+              </td>
+              <td className="px-4 py-3"><span className={`text-xs font-bold ${sla.expired?'text-red-600':'text-gray-600'}`}>{sla.expired&&<i className="fas fa-exclamation-circle mr-1"></i>}{sla.text}</span></td>
+              <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">{timeAgo(c.created_at)}</td>
+            </tr>;
+          })}</tbody>
+        </table>
+        {!loading&&filtered.length===0&&<div className="py-12 text-center text-gray-400 text-sm"><i className="fas fa-filter-circle-xmark text-2xl mb-2 block"></i>No complaints match the selected filters</div>}
+        {loading&&complaints.length===0&&<div className="py-12 text-center text-gray-400 text-sm"><i className="fas fa-spinner text-2xl mb-2 block" style={{animation:'spin 1s linear infinite'}}></i>Loading tickets…</div>}
+      </div>
+    </div>
+  </div>;
+}
+
+/* ===== HEADER ===== */
+function Header({activeTab,setActiveTab}){
+  return<header className="header-bg text-white shadow-2xl sticky top-0 z-40">
+    <div className="max-w-7xl mx-auto px-4">
+      <div className="flex items-center justify-between h-16">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-saffron-500 flex items-center justify-center shadow-lg shadow-saffron-500/20"><i className="fas fa-landmark text-white"></i></div>
+          <div><h1 className="font-display font-extrabold text-lg leading-tight tracking-tight">Nagarik Mitra</h1><p className="text-[10px] text-navy-300 font-medium tracking-wide">Civic Grievance Classification &amp; Routing</p></div>
+        </div>
+        <nav className="hidden sm:flex items-center gap-1 bg-white/10 backdrop-blur rounded-lg p-1">
+          {[{k:'submit',icon:'fa-pen-to-square',l:'Submit Complaint'},{k:'dashboard',icon:'fa-chart-pie',l:'Dashboard'}].map(t=>
+            <button key={t.k} onClick={()=>setActiveTab(t.k)} className={`px-4 py-2 rounded-md text-xs font-bold transition-all flex items-center gap-2 ${activeTab===t.k?'bg-saffron-500 text-white shadow-lg shadow-saffron-500/30':'text-navy-200 hover:text-white hover:bg-white/10'}`}><i className={`fas ${t.icon}`}></i><span className="hidden md:inline">{t.l}</span></button>
+          )}
+        </nav>
+        <div className="flex items-center gap-3">
+          <div className="hidden sm:flex items-center gap-1.5 bg-white/10 backdrop-blur px-3 py-1.5 rounded-full"><i className="fas fa-bolt text-saffron-400 text-xs"></i><span className="text-[10px] font-bold text-navy-200 tracking-wide">ML POWERED</span></div>
+          <button onClick={()=>setActiveTab(activeTab==='submit'?'dashboard':'submit')} className="sm:hidden w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center"><i className={`fas ${activeTab==='submit'?'fa-chart-pie':'fa-pen-to-square'} text-sm`}></i></button>
+        </div>
+      </div>
+      <div className="sm:hidden flex items-center gap-1 bg-white/10 backdrop-blur rounded-lg p-1 mb-3">
+        {[{k:'submit',icon:'fa-pen-to-square',l:'Submit'},{k:'dashboard',icon:'fa-chart-pie',l:'Dashboard'}].map(t=>
+          <button key={t.k} onClick={()=>setActiveTab(t.k)} className={`flex-1 px-3 py-2 rounded-md text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeTab===t.k?'bg-saffron-500 text-white shadow':'text-navy-200'}`}><i className={`fas ${t.icon}`}></i>{t.l}</button>
+        )}
+      </div>
+    </div>
+  </header>;
+}
+
+/* ===== APP ===== */
+function App(){
+  const[activeTab,setActiveTab]=useState('submit');
+  const[complaints,setComplaints]=useState([]);
+  const[loading,setLoading]=useState(true);
+  const[apiError,setApiError]=useState(null);
+
+  const fetchComplaints=useCallback(async()=>{
+    try{
+      const data=await apiListTickets();
+      setComplaints(data);
+      setApiError(null);
+    }catch(e){
+      setApiError(e.message||'Could not reach the Nagarik Mitra API.');
+    }finally{
+      setLoading(false);
+    }
+  },[]);
+
+  useEffect(()=>{
+    fetchComplaints();
+    const iv=setInterval(fetchComplaints,15000);
+    return()=>clearInterval(iv);
+  },[fetchComplaints]);
+
+  return<div className="min-h-screen flex flex-col">
+    <Header activeTab={activeTab} setActiveTab={setActiveTab}/>
+    {apiError&&<div className="max-w-7xl mx-auto w-full px-4 pt-4"><ErrorBanner message={`${apiError} Start it with: bash scripts/run_api.sh`}/></div>}
+    <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
+      {activeTab==='submit'?<SubmitView onSubmitted={fetchComplaints}/>:<DashboardView complaints={complaints} loading={loading} onChanged={fetchComplaints}/>}
+    </main>
+    <footer className="border-t border-gray-200 bg-white/60 backdrop-blur py-4 mt-auto">
+      <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-gray-400">
+        <span className="font-display font-semibold text-gray-500">Nagarik Mitra v1.0</span>
+        <span>B.Tech CSE (AI/ML) demo project — classification via TF-IDF + scikit-learn, not a CPGRAMS replacement.</span>
+      </div>
+    </footer>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

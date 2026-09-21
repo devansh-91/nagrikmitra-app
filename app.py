@@ -23,7 +23,7 @@ Reload the page between test tickets; tab out of the textarea before
 hitting Classify (Streamlit state quirk noted in the acceptance tests).
 """
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pandas as pd
 import streamlit as st
@@ -286,7 +286,7 @@ with tabs[3]:
             st.write("Volume by language")
             st.bar_chart(df["language"].value_counts())
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         df["due_at_dt"] = pd.to_datetime(df["due_at"])
         breaches = df[(df["status"] != "resolved") & (df["due_at_dt"] < now)]
         st.metric("SLA breaches (open + overdue)", len(breaches))

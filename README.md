@@ -52,9 +52,27 @@ python -m nagrikmitra.train
 
 ## Run
 ```bash
-bash scripts/run_api.sh     # FastAPI at http://localhost:8000  (/health, /predict, ...)
-bash scripts/run_ui.sh      # Streamlit UI
+bash scripts/run_api.sh     # FastAPI + web UI at http://localhost:8000  (/health, /predict, ...)
+bash scripts/run_ui.sh      # Streamlit UI (alternate/legacy)
+bash scripts/run_mcp.sh     # MCP server (stdio) for MCP clients, e.g. Claude Desktop
 ```
+`scripts/run_api.sh` serves both the JSON API and `frontend/index.html` (citizen
+submission form + officer dashboard) from the same process — open
+http://localhost:8000 in a browser.
+
+### MCP server
+`mcp_server.py` exposes the routing engine as MCP tools (`classify_complaint`,
+`list_tickets`, `get_ticket`, `update_ticket_status`, `override_ticket`,
+`get_analytics`, `submit_to_gov_portal`) for any MCP client. Point a client at
+`.venv/bin/python /absolute/path/to/mcp_server.py`.
+
+`submit_to_gov_portal` does **not** submit to any real government portal —
+CPGRAMS and state/municipal grievance portals have no confirmed public
+submission API and gate their citizen forms with CAPTCHA/OTP specifically
+against automated filing. It calls `gov_portal.MockGovPortalAdapter`, which
+simulates the round trip (fake reference number, no network call). See
+`gov_portal.py` for the `GovPortalAdapter` interface to implement against a
+real portal if you obtain genuine, authorized API access to one.
 
 Example call:
 ```bash

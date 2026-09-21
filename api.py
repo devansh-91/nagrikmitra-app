@@ -6,37 +6,45 @@ Endpoints (per spec section 7):
        -> { ok, service, llm: { groq, ollama, active, model } }
 
   POST /predict
-       body: { text, use_llm, channel, persist }
-       -> { language, domain, department, priority, confidence, needs_human,
-            sla_hours, suggested_reply, template_reply, source, llm_backend,
-            llm_error, similar, explain, domain_top3, priority_top3 }
+       body: { text, use_llm, channel, persist, name, location }
+       -> { language, normalized_text, domain, department, priority,
+            confidence, needs_human, sla_hours, suggested_reply,
+            template_reply, source, llm_backend, llm_error, similar,
+            explain, domain_top3, priority_top3, ticket_id }
 
   GET  /tickets            (filterable: domain, priority, language, needs_human, status)
   POST /tickets/{id}/override
        body: { new_domain, new_priority, reason, actor }
        -> writes audit row, recomputes due_at
+  PATCH /tickets/{id}/status
+       body: { status }   status in ["New", "In Progress", "Resolved"]
 
   GET  /analytics
        -> volume by domain/priority/language, SLA breach counts
 
 sklearn always runs and owns domain/priority decisions; the LLM (Groq/Ollama,
 optional) only polishes the template reply text and can never change routing.
+
+GET "/" and any unmatched path serve frontend/index.html (the citizen/officer
+web UI), which talks to the API above via same-origin fetch calls.
 """
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from nagrikmitra import store
-from nagrikmitra.config import GROQ_API_KEY, GROQ_MODEL, OLLAMA_MODEL
+from nagrikmitra.config import BASE_DIR, GROQ_API_KEY, GROQ_MODEL, OLLAMA_MODEL
 from nagrikmitra.explain import explain_prediction
 from nagrikmitra.llm import active_backend, polish
 from nagrikmitra.predict import load_models, predict
 from nagrikmitra.reply import render_template
 from nagrikmitra.similar import similar_tickets
+from nagrikmitra.store import STATUSES
 
 
 @asynccontextmanager
@@ -62,6 +70,8 @@ class PredictRequest(BaseModel):
     use_llm: bool = False
     channel: str = "web"
     persist: bool = False
+    name: str = ""
+    location: str = ""
 
 
 class OverrideRequest(BaseModel):
@@ -69,6 +79,10 @@ class OverrideRequest(BaseModel):
     new_priority: str
     reason: str = ""
     actor: str = "officer"
+
+
+class StatusRequest(BaseModel):
+    status: str
 
 
 @app.get("/health")
@@ -133,11 +147,14 @@ def do_predict(req: PredictRequest):
             sla_hours=result["sla_hours"],
             source="api",
             channel=req.channel,
+            name=req.name,
+            location=req.location,
         )
 
     return {
         "ticket_id": ticket_id,
         "language": result["language"],
+        "normalized_text": result["clean_text"],
         "domain": result["domain"],
         "department": result["department"],
         "priority": result["priority"],
@@ -188,6 +205,18 @@ def override_ticket(ticket_id: int, req: OverrideRequest):
     return updated
 
 
+@app.patch("/tickets/{ticket_id}/status")
+def update_ticket_status(ticket_id: int, req: StatusRequest):
+    if req.status not in STATUSES:
+        raise HTTPException(
+            status_code=400, detail=f"status must be one of {STATUSES}"
+        )
+    updated = store.update_status(ticket_id, req.status)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="ticket not found")
+    return updated
+
+
 @app.get("/analytics")
 def analytics():
     tickets = store.list_tickets({})
@@ -196,14 +225,14 @@ def analytics():
     volume_by_priority = {}
     volume_by_language = {}
     sla_breaches = 0
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     for t in tickets:
         volume_by_domain[t["domain"]] = volume_by_domain.get(t["domain"], 0) + 1
         volume_by_priority[t["priority"]] = volume_by_priority.get(t["priority"], 0) + 1
         volume_by_language[t["language"]] = volume_by_language.get(t["language"], 0) + 1
 
-        if t["status"] != "resolved" and t["due_at"]:
+        if t["status"] != "Resolved" and t["due_at"]:
             due_at = datetime.fromisoformat(t["due_at"])
             if now > due_at:
                 sla_breaches += 1
@@ -215,3 +244,9 @@ def analytics():
         "volume_by_language": volume_by_language,
         "sla_breaches": sla_breaches,
     }
+
+
+# Serves frontend/index.html (the citizen/officer web UI) at "/" and its
+# static assets alongside it. Mounted last so it never shadows the API
+# routes defined above — Starlette matches routes in registration order.
+app.mount("/", StaticFiles(directory=str(BASE_DIR / "frontend"), html=True), name="frontend")
