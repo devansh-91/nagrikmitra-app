@@ -11,6 +11,7 @@ requests
 pytest
 bcrypt
 itsdangerous
+psycopg2-binary
 mcp<2  # v2 renamed FastMCP -> MCPServer; mcp_server.py targets the v1 API
 # Optional LLM clients (import-guarded; app must run without them / without a key):
 groq

@@ -10,6 +10,8 @@ services:
         value: 3.13.15
       - key: SESSION_SECRET
         generateValue: true
+      - key: DATABASE_URL
+        sync: false
       - key: OFFICER_SIGNUP_CODE
         sync: false
       - key: GROQ_API_KEY
