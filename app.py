@@ -43,12 +43,29 @@ GREEN = "#1B7A6E"
 
 st.set_page_config(page_title="Nagarik Mitra | नागरिक मित्र", page_icon="🏛️", layout="wide")
 
+TEXT_LIGHT = "#EDEFF4"
+TEXT_MUTED = "#B8C0D4"
+
 st.markdown(
     f"""
     <style>
-    .stApp {{ background-color: {NAVY_DARK}; }}
+    .stApp {{ background-color: {NAVY_DARK}; color: {TEXT_LIGHT}; }}
     section[data-testid="stSidebar"] {{ background-color: {NAVY}; }}
     h1, h2, h3 {{ color: {SAFFRON}; }}
+    p, span, label, li, div {{ color: {TEXT_LIGHT}; }}
+    [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] * {{
+        color: {TEXT_MUTED} !important;
+    }}
+    [data-testid="stMetricValue"] {{ color: {TEXT_LIGHT} !important; }}
+    [data-testid="stMetricLabel"] {{ color: {TEXT_MUTED} !important; }}
+    [data-testid="stWidgetLabel"] p {{ color: {TEXT_LIGHT} !important; }}
+    [data-testid="stMarkdownContainer"] p {{ color: {TEXT_LIGHT} !important; }}
+    [data-baseweb="tab"] p {{ color: {TEXT_MUTED} !important; }}
+    [aria-selected="true"] p {{ color: {SAFFRON} !important; }}
+    [data-testid="stExpander"] summary {{ color: {TEXT_LIGHT} !important; }}
+    .stTextArea textarea, .stTextInput input {{
+        color: #111c33 !important; background-color: #F2F4F8 !important;
+    }}
     .nm-badge {{
         display: inline-block; padding: 2px 10px; border-radius: 12px;
         color: white; font-size: 0.85em; margin-right: 6px;
