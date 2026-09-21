@@ -14,14 +14,18 @@ Endpoints (per spec section 7):
             portal_name, portal_reference, portal_status, portal_note }
 
   GET  /tickets            (filterable: domain, priority, language, needs_human, status)
+       -> officer-only (401 without an officer session)
+  GET  /my-tickets         -> citizen-only: tickets filed by the logged-in citizen
   POST /tickets/{id}/override
-       body: { new_domain, new_priority, reason, actor }
-       -> writes audit row, recomputes due_at
+       body: { new_domain, new_priority, reason }
+       -> officer-only; writes audit row (actor = the officer's account),
+          recomputes due_at
   PATCH /tickets/{id}/status
        body: { status }   status in ["New", "In Progress", "Resolved"]
+       -> officer-only
 
   GET  /analytics
-       -> volume by domain/priority/language, SLA breach counts
+       -> officer-only; volume by domain/priority/language, SLA breach counts
 
 sklearn always runs and owns domain/priority decisions; the LLM (Groq/Ollama,
 optional) only polishes the template reply text and can never change routing.
@@ -31,6 +35,12 @@ MockGovPortalAdapter — a SIMULATED per-domain government portal (see
 gov_portal.py). No real CPGRAMS or department portal is ever contacted; the
 portal_* response fields and portal_note make that explicit.
 
+Auth (see nagrikmitra/auth.py, auth_routes.py) is cookie-session based, with
+separate citizen/officer accounts. POST /predict never requires login — guest
+submission still works — but attaches the caller's account when a citizen
+session is present. /tickets, /tickets/{id}/override, /tickets/{id}/status,
+and /analytics require an officer session.
+
 GET "/" and any unmatched path serve frontend/index.html (the citizen/officer
 web UI), which talks to the API above via same-origin fetch calls.
 """
@@ -38,13 +48,14 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import auth_routes
 from gov_portal import MockGovPortalAdapter, PortalSubmissionError
-from nagrikmitra import store
+from nagrikmitra import auth, store
 from nagrikmitra.config import BASE_DIR, GROQ_API_KEY, GROQ_MODEL, OLLAMA_MODEL
 from nagrikmitra.explain import explain_prediction
 from nagrikmitra.llm import active_backend, polish
@@ -73,6 +84,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_routes.router)
+
 
 class PredictRequest(BaseModel):
     text: str
@@ -87,7 +100,6 @@ class OverrideRequest(BaseModel):
     new_domain: str
     new_priority: str
     reason: str = ""
-    actor: str = "officer"
 
 
 class StatusRequest(BaseModel):
@@ -109,9 +121,16 @@ def health():
 
 
 @app.post("/predict")
-def do_predict(req: PredictRequest):
+def do_predict(req: PredictRequest, request: Request):
     if not req.text or not req.text.strip():
         raise HTTPException(status_code=400, detail="text must not be empty")
+
+    # Guest submission always works — no login required. If a citizen IS
+    # logged in, attach their account and use its name instead of whatever
+    # the client sent for "name".
+    current_user = auth.get_current_user(request)
+    citizen_id = current_user["id"] if current_user and current_user["role"] == "citizen" else None
+    ticket_name = current_user["full_name"] if citizen_id else req.name
 
     result = predict(req.text, channel=req.channel)
 
@@ -157,8 +176,9 @@ def do_predict(req: PredictRequest):
             sla_hours=result["sla_hours"],
             source="api",
             channel=req.channel,
-            name=req.name,
+            name=ticket_name,
             location=req.location,
+            citizen_id=citizen_id,
         )
 
         # Forward to the SIMULATED per-domain government portal adapter (see
@@ -206,6 +226,7 @@ def get_tickets(
     language: Optional[str] = None,
     needs_human: Optional[bool] = None,
     status: Optional[str] = None,
+    officer: dict = Depends(auth.require_officer),
 ):
     filters = {
         "domain": domain,
@@ -217,14 +238,19 @@ def get_tickets(
     return store.list_tickets(filters)
 
 
+@app.get("/my-tickets")
+def my_tickets(citizen: dict = Depends(auth.require_citizen)):
+    return store.list_tickets_for_citizen(citizen["id"])
+
+
 @app.post("/tickets/{ticket_id}/override")
-def override_ticket(ticket_id: int, req: OverrideRequest):
+def override_ticket(ticket_id: int, req: OverrideRequest, officer: dict = Depends(auth.require_officer)):
     updated = store.override_ticket(
         ticket_id=ticket_id,
         new_domain=req.new_domain,
         new_priority=req.new_priority,
         reason=req.reason,
-        actor=req.actor,
+        actor=officer["full_name"],
     )
     if updated is None:
         raise HTTPException(status_code=404, detail="ticket not found")
@@ -232,7 +258,7 @@ def override_ticket(ticket_id: int, req: OverrideRequest):
 
 
 @app.patch("/tickets/{ticket_id}/status")
-def update_ticket_status(ticket_id: int, req: StatusRequest):
+def update_ticket_status(ticket_id: int, req: StatusRequest, officer: dict = Depends(auth.require_officer)):
     if req.status not in STATUSES:
         raise HTTPException(
             status_code=400, detail=f"status must be one of {STATUSES}"
@@ -244,7 +270,7 @@ def update_ticket_status(ticket_id: int, req: StatusRequest):
 
 
 @app.get("/analytics")
-def analytics():
+def analytics(officer: dict = Depends(auth.require_officer)):
     tickets = store.list_tickets({})
 
     volume_by_domain = {}

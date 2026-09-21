@@ -48,7 +48,7 @@ const API_BASE = (typeof window!=='undefined'&&window.API_BASE)||'';
 async function apiRequest(path,options){
   let res;
   try{
-    res=await fetch(`${API_BASE}${path}`,options);
+    res=await fetch(`${API_BASE}${path}`,{credentials:'include',...options});
   }catch(networkErr){
     throw new Error('Cannot reach the Nagarik Mitra API. Is the server running?');
   }
@@ -59,10 +59,18 @@ async function apiRequest(path,options){
   }
   return res.json();
 }
+const jsonPost=(path,payload)=>apiRequest(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
 const apiHealth=()=>apiRequest('/health');
-const apiPredict=payload=>apiRequest('/predict',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+const apiPredict=payload=>jsonPost('/predict',payload);
 const apiListTickets=()=>apiRequest('/tickets');
+const apiMyTickets=()=>apiRequest('/my-tickets');
 const apiUpdateStatus=(id,status)=>apiRequest(`/tickets/${id}/status`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});
+// Auth (nagrikmitra/auth.py, auth_routes.py) — cookie session, same-origin.
+const apiAuthConfig=()=>apiRequest('/auth/config');
+const apiMe=()=>apiRequest('/auth/me');
+const apiRegister=payload=>jsonPost('/auth/register',payload);
+const apiLogin=payload=>jsonPost('/auth/login',payload);
+const apiLogout=()=>apiRequest('/auth/logout',{method:'POST'});
 
 /* ===== TAXONOMY (mirrors config/taxonomy.yaml) ===== */
 const OTHER_DOMAIN='Other / Unknown';
@@ -124,6 +132,10 @@ function slaRemaining(c){
   const h=Math.floor(rem/3600000),m=Math.floor((rem%3600000)/60000);
   return{text:h+'h '+m+'m',expired:false};
 }
+
+/* ===== SHARED FORM STYLES ===== */
+const inputCls='w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-saffron-200 focus:border-saffron-500 outline-none transition text-gray-800 placeholder-gray-400 disabled:opacity-50';
+const labelCls='block text-sm font-semibold text-gray-700 mb-1.5';
 
 /* ===== SMALL COMPONENTS ===== */
 function Badge({label,meta}){
@@ -288,7 +300,7 @@ function ResultCard({result,onReset}){
 }
 
 /* ===== SUBMIT VIEW ===== */
-function SubmitView({onSubmitted}){
+function SubmitView({user,onSubmitted,onNavigate}){
   const[text,setText]=useState('');
   const[name,setName]=useState('');
   const[loc,setLoc]=useState('');
@@ -309,7 +321,7 @@ function SubmitView({onSubmitted}){
 
     let api;
     try{
-      api=await apiPredict({text,name,location:loc,channel:'web',persist:true,use_llm:useLlm});
+      api=await apiPredict({text,name:user?user.full_name:name,location:loc,channel:'web',persist:true,use_llm:useLlm});
     }catch(err){
       setPipeState('idle');setPipeStep(0);setPipeResults({});
       setErrorMsg(err.message||'Something went wrong contacting the API.');
@@ -345,10 +357,14 @@ function SubmitView({onSubmitted}){
     <Toast message="Complaint submitted and routed successfully!" visible={toast}/>
     {errorMsg&&<ErrorBanner message={errorMsg}/>}
     <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-3 mb-4">
         <div className="w-10 h-10 rounded-xl bg-saffron-50 flex items-center justify-center"><i className="fas fa-comment-dots text-saffron-500"></i></div>
         <div><h2 className="font-display font-bold text-xl text-navy-800">File a Complaint</h2><p className="text-sm text-gray-500">Type in Hindi, English, or Hinglish — the classifier handles the rest</p></div>
       </div>
+      {!user&&<div className="mb-4 bg-saffron-50 border border-saffron-100 text-saffron-800 text-xs rounded-xl px-4 py-2.5 flex items-center gap-2">
+        <i className="fas fa-circle-info flex-shrink-0"></i>
+        <span>Filing as a guest — that's fine, but <button type="button" onClick={()=>onNavigate('login')} className="underline font-semibold">signing in</button> lets you track your complaints under "My Complaints" later.</span>
+      </div>}
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-1.5">Complaint Description <span className="text-red-400">*</span></label>
@@ -356,7 +372,12 @@ function SubmitView({onSubmitted}){
           <p className="mt-1 text-xs text-gray-400">Supports Devanagari script, English, and Romanized Hindi (Hinglish)</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div><label className="block text-sm font-semibold text-gray-700 mb-1.5">Your Name</label><input type="text" className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-saffron-200 focus:border-saffron-500 outline-none transition text-gray-800 placeholder-gray-400" placeholder="Enter your name" value={name} onChange={e=>setName(e.target.value)} disabled={pipeState!=='idle'}/></div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1.5">Your Name</label>
+            {user?
+              <div className="w-full px-4 py-2.5 border-2 border-gray-100 rounded-xl bg-gray-50 text-gray-700 text-sm flex items-center gap-2"><i className="fas fa-circle-check text-civic-green"></i>{user.full_name}<span className="text-gray-400">(signed in)</span></div>
+              :<input type="text" className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-saffron-200 focus:border-saffron-500 outline-none transition text-gray-800 placeholder-gray-400" placeholder="Enter your name" value={name} onChange={e=>setName(e.target.value)} disabled={pipeState!=='idle'}/>}
+          </div>
           <div><label className="block text-sm font-semibold text-gray-700 mb-1.5">Location</label><input type="text" className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-saffron-200 focus:border-saffron-500 outline-none transition text-gray-800 placeholder-gray-400" placeholder="e.g., Sector 15, Lucknow" value={loc} onChange={e=>setLoc(e.target.value)} disabled={pipeState!=='idle'}/></div>
         </div>
         <label className="flex items-center gap-2 text-sm text-gray-600 select-none">
@@ -426,7 +447,7 @@ function StatusChart({data}){
   return<div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100"><h3 className="font-display font-bold text-navy-800 mb-4 text-sm">By Status</h3><div style={{height:220}}><canvas ref={ref}></canvas></div></div>;
 }
 
-function DashboardView({complaints,loading,onChanged}){
+function DashboardView({user,complaints,loading,onChanged}){
   const[tick,setTick]=useState(0);
   const[domFilter,setDomFilter]=useState('all');
   const[priFilter,setPriFilter]=useState('all');
@@ -434,6 +455,13 @@ function DashboardView({complaints,loading,onChanged}){
   const[updatingId,setUpdatingId]=useState(null);
   const[actionError,setActionError]=useState(null);
   useEffect(()=>{const iv=setInterval(()=>setTick(t=>t+1),1000);return()=>clearInterval(iv)},[]);
+
+  if(!user||user.role!=='officer'){
+    return<div className="max-w-md mx-auto text-center py-20">
+      <i className="fas fa-lock text-3xl text-gray-300 mb-3 block"></i>
+      <p className="text-gray-500 text-sm">Sign in as an officer to see the inbox.</p>
+    </div>;
+  }
 
   const total=complaints.length;
   const highCount=complaints.filter(c=>c.priority==='High').length;
@@ -531,8 +559,191 @@ function DashboardView({complaints,loading,onChanged}){
   </div>;
 }
 
+/* ===== MY TICKETS (citizen) ===== */
+function MyTicketsView({user,tickets,loading,onChanged}){
+  if(!user||user.role!=='citizen'){
+    return<div className="max-w-md mx-auto text-center py-20">
+      <i className="fas fa-lock text-3xl text-gray-300 mb-3 block"></i>
+      <p className="text-gray-500 text-sm">Sign in as a citizen to see your complaints.</p>
+    </div>;
+  }
+  return<div className="max-w-5xl mx-auto space-y-4">
+    <div className="flex items-center justify-between">
+      <h2 className="font-display font-bold text-xl text-navy-800">My Complaints</h2>
+      <button onClick={onChanged} className="text-xs font-medium px-3 py-2 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 flex items-center gap-1.5"><i className="fas fa-rotate-right text-[10px]"></i>Refresh</button>
+    </div>
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px]">
+          <thead><tr className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-gray-50">
+            <th className="px-4 py-3">ID</th><th className="px-4 py-3">Complaint</th><th className="px-4 py-3">Domain</th><th className="px-4 py-3">Priority</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Portal (Simulated)</th><th className="px-4 py-3">SLA</th><th className="px-4 py-3">Submitted</th>
+          </tr></thead>
+          <tbody>{tickets.map(c=>{
+            const sla=slaRemaining(c);
+            const dm=domainMeta[c.domain]||domainMeta[OTHER_DOMAIN];
+            return<tr key={c.id} className="border-t border-gray-50 hover:bg-gray-50/50 transition-colors">
+              <td className="px-4 py-3 text-xs font-mono text-gray-400">#{c.id}</td>
+              <td className="px-4 py-3 text-sm text-gray-700 max-w-[240px] truncate" title={c.text}>{c.text}</td>
+              <td className="px-4 py-3"><Badge label={c.domain} meta={dm}/></td>
+              <td className="px-4 py-3"><Badge label={c.priority} meta={priorityMeta[c.priority]}/></td>
+              <td className="px-4 py-3"><Badge label={c.status} meta={statusMeta[c.status]||statusMeta.New}/></td>
+              <td className="px-4 py-3 text-xs">{c.portal_reference?<span className="text-gray-600 font-mono">{c.portal_reference}</span>:<span className="text-gray-300">—</span>}</td>
+              <td className="px-4 py-3"><span className={`text-xs font-bold ${sla.expired?'text-red-600':'text-gray-600'}`}>{sla.expired&&<i className="fas fa-exclamation-circle mr-1"></i>}{sla.text}</span></td>
+              <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">{timeAgo(c.created_at)}</td>
+            </tr>;
+          })}</tbody>
+        </table>
+        {!loading&&tickets.length===0&&<div className="py-12 text-center text-gray-400 text-sm"><i className="fas fa-inbox text-2xl mb-2 block"></i>You haven't filed any complaints yet.</div>}
+        {loading&&tickets.length===0&&<div className="py-12 text-center text-gray-400 text-sm"><i className="fas fa-spinner text-2xl mb-2 block" style={{animation:'spin 1s linear infinite'}}></i>Loading…</div>}
+      </div>
+    </div>
+  </div>;
+}
+
+/* ===== AUTH (login / register) =====
+   Citizen and officer accounts share one users table (nagrikmitra/store.py)
+   distinguished by role; officer self-registration is gated by a shared
+   signup code (OFFICER_SIGNUP_CODE) checked server-side (auth_routes.py) —
+   the field below is never trusted client-side, just forwarded. */
+function AuthRoleToggle({role,setRole,disabled}){
+  return<div className="grid grid-cols-2 gap-2 mb-5">
+    {[{k:'citizen',icon:'fa-user',l:'Citizen'},{k:'officer',icon:'fa-user-shield',l:'Officer'}].map(t=>
+      <button key={t.k} type="button" disabled={disabled} onClick={()=>setRole(t.k)} className={`py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 border-2 transition ${role===t.k?'bg-navy-800 border-navy-800 text-white':'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}><i className={`fas ${t.icon}`}></i>{t.l}</button>
+    )}
+  </div>;
+}
+
+function GoogleButton({role,officerCode}){
+  const disabled=role==='officer'&&!officerCode.trim();
+  const href=`${API_BASE}/auth/google/login?role=${role}`+(role==='officer'?`&officer_code=${encodeURIComponent(officerCode)}`:'');
+  return<a href={disabled?undefined:href} aria-disabled={disabled} className={`w-full py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 border-2 transition ${disabled?'border-gray-100 text-gray-300 cursor-not-allowed pointer-events-none':'border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50'}`}>
+    <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l6-6C34.5 5.1 29.5 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.3-.1-2.7-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.8 1.1 8 3l6-6C34.5 5.1 29.5 3 24 3c-7.7 0-14.4 4.3-17.7 10.7z"/><path fill="#4CAF50" d="M24 45c5.4 0 10.3-1.8 14.1-4.9l-6.5-5.5C29.5 36.4 26.9 37 24 37c-5.3 0-9.7-3.3-11.3-8l-6.6 5C9.5 40.6 16.2 45 24 45z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.7l6.5 5.5C40.5 36.7 45 30.9 45 24c0-1.3-.1-2.7-.4-3.5z"/></svg>
+    Continue with Google{disabled?' (enter signup code below)':''}
+  </a>;
+}
+
+function AuthCard({icon,iconBg,title,subtitle,children}){
+  return<div className="max-w-md mx-auto">
+    <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+      <div className="text-center mb-6">
+        <div className={`w-12 h-12 rounded-xl ${iconBg} flex items-center justify-center mx-auto mb-3`}><i className={`fas ${icon} text-white`}></i></div>
+        <h2 className="font-display font-bold text-xl text-navy-800">{title}</h2>
+        <p className="text-sm text-gray-500 mt-1">{subtitle}</p>
+      </div>
+      {children}
+    </div>
+  </div>;
+}
+
+function GoogleSeparator(){
+  return<div className="flex items-center gap-3 my-4"><div className="flex-1 h-px bg-gray-100"></div><span className="text-xs text-gray-400">or</span><div className="flex-1 h-px bg-gray-100"></div></div>;
+}
+
+function LoginPage({googleEnabled,onAuthed,onNavigate}){
+  const[role,setRole]=useState('citizen');
+  const[identifier,setIdentifier]=useState('');
+  const[password,setPassword]=useState('');
+  const[officerCode,setOfficerCode]=useState('');
+  const[loading,setLoading]=useState(false);
+  const[error,setError]=useState(null);
+
+  const handleSubmit=async e=>{
+    e.preventDefault();
+    setError(null);setLoading(true);
+    try{
+      const user=await apiLogin({identifier,password});
+      onAuthed(user);
+    }catch(err){
+      setError(err.message||'Login failed.');
+    }finally{
+      setLoading(false);
+    }
+  };
+
+  return<AuthCard icon="fa-right-to-bracket" iconBg="bg-navy-800" title="Sign In" subtitle="Access your complaints or the officer inbox">
+    <AuthRoleToggle role={role} setRole={setRole} disabled={loading}/>
+    {error&&<div className="mb-4"><ErrorBanner message={error}/></div>}
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div><label className={labelCls}>Username or Email</label><input type="text" required value={identifier} onChange={e=>setIdentifier(e.target.value)} disabled={loading} className={inputCls}/></div>
+      <div><label className={labelCls}>Password</label><input type="password" required value={password} onChange={e=>setPassword(e.target.value)} disabled={loading} className={inputCls}/></div>
+      {role==='officer'&&<div>
+        <label className={labelCls}>Officer Signup Code <span className="text-gray-400 font-normal">(only needed for Google sign-in)</span></label>
+        <input type="text" value={officerCode} onChange={e=>setOfficerCode(e.target.value)} disabled={loading} className={inputCls}/>
+      </div>}
+      <button type="submit" disabled={loading} className="w-full py-3 bg-navy-800 text-white font-display font-bold rounded-xl hover:bg-navy-700 disabled:opacity-50 transition-all">{loading?'Signing in…':'Sign In'}</button>
+    </form>
+    {googleEnabled&&<><GoogleSeparator/><GoogleButton role={role} officerCode={officerCode}/></>}
+    <p className="text-center text-sm text-gray-500 mt-6">Don't have an account? <button type="button" onClick={()=>onNavigate('register')} className="text-saffron-600 font-semibold hover:underline">Register</button></p>
+    <p className="text-center text-xs text-gray-400 mt-2"><button type="button" onClick={()=>onNavigate('submit')} className="hover:underline">Continue as guest instead</button></p>
+  </AuthCard>;
+}
+
+function RegisterPage({googleEnabled,onAuthed,onNavigate}){
+  const[role,setRole]=useState('citizen');
+  const[fullName,setFullName]=useState('');
+  const[username,setUsername]=useState('');
+  const[email,setEmail]=useState('');
+  const[password,setPassword]=useState('');
+  const[phone,setPhone]=useState('');
+  const[department,setDepartment]=useState('');
+  const[officerCode,setOfficerCode]=useState('');
+  const[loading,setLoading]=useState(false);
+  const[error,setError]=useState(null);
+
+  const handleSubmit=async e=>{
+    e.preventDefault();
+    setError(null);setLoading(true);
+    try{
+      const user=await apiRegister({role,full_name:fullName,username,email,password,phone,department,officer_code:officerCode});
+      onAuthed(user);
+    }catch(err){
+      setError(err.message||'Registration failed.');
+    }finally{
+      setLoading(false);
+    }
+  };
+
+  return<AuthCard icon="fa-user-plus" iconBg="bg-saffron-500" title="Create Account" subtitle="Register as a citizen or an officer">
+    <AuthRoleToggle role={role} setRole={setRole} disabled={loading}/>
+    {error&&<div className="mb-4"><ErrorBanner message={error}/></div>}
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div><label className={labelCls}>Full Name</label><input type="text" required value={fullName} onChange={e=>setFullName(e.target.value)} disabled={loading} className={inputCls}/></div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><label className={labelCls}>Username</label><input type="text" required minLength={3} value={username} onChange={e=>setUsername(e.target.value)} disabled={loading} className={inputCls}/></div>
+        <div><label className={labelCls}>Email</label><input type="email" required value={email} onChange={e=>setEmail(e.target.value)} disabled={loading} className={inputCls}/></div>
+      </div>
+      <div>
+        <label className={labelCls}>Password</label>
+        <input type="password" required minLength={6} value={password} onChange={e=>setPassword(e.target.value)} disabled={loading} className={inputCls}/>
+        <p className="mt-1 text-xs text-gray-400">At least 6 characters</p>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><label className={labelCls}>Phone <span className="text-gray-400 font-normal">(optional)</span></label><input type="text" value={phone} onChange={e=>setPhone(e.target.value)} disabled={loading} className={inputCls}/></div>
+        {role==='officer'&&<div><label className={labelCls}>Department</label><input type="text" value={department} onChange={e=>setDepartment(e.target.value)} disabled={loading} placeholder="e.g., PWD" className={inputCls}/></div>}
+      </div>
+      {role==='officer'&&<div>
+        <label className={labelCls}>Officer Signup Code <span className="text-red-400">*</span></label>
+        <input type="text" required value={officerCode} onChange={e=>setOfficerCode(e.target.value)} disabled={loading} className={inputCls}/>
+        <p className="mt-1 text-xs text-gray-400">Ask your administrator for this code.</p>
+      </div>}
+      <button type="submit" disabled={loading} className="w-full py-3 bg-navy-800 text-white font-display font-bold rounded-xl hover:bg-navy-700 disabled:opacity-50 transition-all">{loading?'Creating account…':'Create Account'}</button>
+    </form>
+    {googleEnabled&&<><GoogleSeparator/><GoogleButton role={role} officerCode={officerCode}/></>}
+    <p className="text-center text-sm text-gray-500 mt-6">Already have an account? <button type="button" onClick={()=>onNavigate('login')} className="text-saffron-600 font-semibold hover:underline">Sign in</button></p>
+    <p className="text-center text-xs text-gray-400 mt-2"><button type="button" onClick={()=>onNavigate('submit')} className="hover:underline">Continue as guest instead</button></p>
+  </AuthCard>;
+}
+
 /* ===== HEADER ===== */
-function Header({activeTab,setActiveTab}){
+function navItemsFor(user){
+  const items=[{k:'submit',icon:'fa-pen-to-square',l:'Submit'}];
+  if(user?.role==='officer')items.push({k:'dashboard',icon:'fa-chart-pie',l:'Dashboard'});
+  else if(user?.role==='citizen')items.push({k:'mytickets',icon:'fa-list-check',l:'My Complaints'});
+  return items;
+}
+
+function Header({activeTab,setActiveTab,user,authChecked,onLogout}){
+  const navItems=navItemsFor(user);
   return<header className="header-bg text-white shadow-2xl sticky top-0 z-40">
     <div className="max-w-7xl mx-auto px-4">
       <div className="flex items-center justify-between h-16">
@@ -541,19 +752,33 @@ function Header({activeTab,setActiveTab}){
           <div><h1 className="font-display font-extrabold text-lg leading-tight tracking-tight">Nagarik Mitra</h1><p className="text-[10px] text-navy-300 font-medium tracking-wide">Civic Grievance Classification &amp; Routing</p></div>
         </div>
         <nav className="hidden sm:flex items-center gap-1 bg-white/10 backdrop-blur rounded-lg p-1">
-          {[{k:'submit',icon:'fa-pen-to-square',l:'Submit Complaint'},{k:'dashboard',icon:'fa-chart-pie',l:'Dashboard'}].map(t=>
+          {navItems.map(t=>
             <button key={t.k} onClick={()=>setActiveTab(t.k)} className={`px-4 py-2 rounded-md text-xs font-bold transition-all flex items-center gap-2 ${activeTab===t.k?'bg-saffron-500 text-white shadow-lg shadow-saffron-500/30':'text-navy-200 hover:text-white hover:bg-white/10'}`}><i className={`fas ${t.icon}`}></i><span className="hidden md:inline">{t.l}</span></button>
           )}
         </nav>
-        <div className="flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-1.5 bg-white/10 backdrop-blur px-3 py-1.5 rounded-full"><i className="fas fa-bolt text-saffron-400 text-xs"></i><span className="text-[10px] font-bold text-navy-200 tracking-wide">ML POWERED</span></div>
-          <button onClick={()=>setActiveTab(activeTab==='submit'?'dashboard':'submit')} className="sm:hidden w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center"><i className={`fas ${activeTab==='submit'?'fa-chart-pie':'fa-pen-to-square'} text-sm`}></i></button>
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="hidden lg:flex items-center gap-1.5 bg-white/10 backdrop-blur px-3 py-1.5 rounded-full"><i className="fas fa-bolt text-saffron-400 text-xs"></i><span className="text-[10px] font-bold text-navy-200 tracking-wide">ML POWERED</span></div>
+          {authChecked&&(user?
+            <div className="flex items-center gap-2">
+              <div className="hidden sm:flex items-center gap-2 bg-white/10 backdrop-blur rounded-full pl-1 pr-3 py-1">
+                <div className="w-6 h-6 rounded-full bg-saffron-500 flex items-center justify-center text-[10px] font-bold flex-shrink-0">{(user.full_name||'?')[0].toUpperCase()}</div>
+                <span className="text-xs font-semibold max-w-[120px] truncate">{user.full_name}</span>
+                <span className="text-[9px] uppercase tracking-wide text-navy-300">{user.role}</span>
+              </div>
+              <button onClick={onLogout} title="Logout" className="w-9 h-9 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition"><i className="fas fa-right-from-bracket text-sm"></i></button>
+            </div>
+            :<div className="flex items-center gap-2">
+              <button onClick={()=>setActiveTab('login')} className="text-xs font-bold px-3 py-2 rounded-lg text-navy-200 hover:text-white hover:bg-white/10 transition">Sign in</button>
+              <button onClick={()=>setActiveTab('register')} className="text-xs font-bold px-3 py-2 rounded-lg bg-saffron-500 text-white hover:bg-saffron-600 transition">Register</button>
+            </div>
+          )}
         </div>
       </div>
       <div className="sm:hidden flex items-center gap-1 bg-white/10 backdrop-blur rounded-lg p-1 mb-3">
-        {[{k:'submit',icon:'fa-pen-to-square',l:'Submit'},{k:'dashboard',icon:'fa-chart-pie',l:'Dashboard'}].map(t=>
+        {navItems.map(t=>
           <button key={t.k} onClick={()=>setActiveTab(t.k)} className={`flex-1 px-3 py-2 rounded-md text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeTab===t.k?'bg-saffron-500 text-white shadow':'text-navy-200'}`}><i className={`fas ${t.icon}`}></i>{t.l}</button>
         )}
+        {user&&<div className="px-3 py-2 text-[10px] text-navy-300 flex items-center gap-1"><i className="fas fa-user text-[9px]"></i>{user.full_name}</div>}
       </div>
     </div>
   </header>;
@@ -562,9 +787,39 @@ function Header({activeTab,setActiveTab}){
 /* ===== APP ===== */
 function App(){
   const[activeTab,setActiveTab]=useState('submit');
+  const[user,setUser]=useState(null);
+  const[authChecked,setAuthChecked]=useState(false);
+  const[googleEnabled,setGoogleEnabled]=useState(false);
+  const[authNotice,setAuthNotice]=useState(null);
   const[complaints,setComplaints]=useState([]);
-  const[loading,setLoading]=useState(true);
+  const[loadingComplaints,setLoadingComplaints]=useState(false);
+  const[myTickets,setMyTickets]=useState([]);
+  const[loadingMyTickets,setLoadingMyTickets]=useState(false);
   const[apiError,setApiError]=useState(null);
+
+  const refreshMe=useCallback(async()=>{
+    try{
+      setUser(await apiMe());
+    }catch(e){
+      setUser(null); // 401 just means no session — not an error to show
+    }finally{
+      setAuthChecked(true);
+    }
+  },[]);
+
+  useEffect(()=>{
+    refreshMe();
+    apiAuthConfig().then(c=>setGoogleEnabled(!!c.google_enabled)).catch(()=>{});
+    // Google OAuth callback redirects here with ?auth_error=... on failure.
+    const params=new URLSearchParams(window.location.search);
+    const err=params.get('auth_error');
+    if(err){
+      setAuthNotice(err);
+      params.delete('auth_error');
+      const qs=params.toString();
+      window.history.replaceState({},'',window.location.pathname+(qs?`?${qs}`:''));
+    }
+  },[refreshMe]);
 
   const fetchComplaints=useCallback(async()=>{
     try{
@@ -574,21 +829,64 @@ function App(){
     }catch(e){
       setApiError(e.message||'Could not reach the Nagarik Mitra API.');
     }finally{
-      setLoading(false);
+      setLoadingComplaints(false);
+    }
+  },[]);
+
+  const fetchMyTickets=useCallback(async()=>{
+    try{
+      setMyTickets(await apiMyTickets());
+    }catch(e){
+      // logged out mid-session or similar — ignore quietly, /auth/me will catch it
+    }finally{
+      setLoadingMyTickets(false);
     }
   },[]);
 
   useEffect(()=>{
-    fetchComplaints();
-    const iv=setInterval(fetchComplaints,15000);
-    return()=>clearInterval(iv);
-  },[fetchComplaints]);
+    if(user?.role==='officer'){
+      setLoadingComplaints(true);
+      fetchComplaints();
+      const iv=setInterval(fetchComplaints,15000);
+      return()=>clearInterval(iv);
+    }
+  },[user,fetchComplaints]);
+
+  useEffect(()=>{
+    if(user?.role==='citizen'){
+      setLoadingMyTickets(true);
+      fetchMyTickets();
+    }
+  },[user,fetchMyTickets]);
+
+  const handleAuthed=u=>{
+    setUser(u);
+    setActiveTab(u.role==='officer'?'dashboard':'submit');
+  };
+
+  const handleSubmitted=()=>{
+    if(user?.role==='officer')fetchComplaints();
+    if(user?.role==='citizen')fetchMyTickets();
+  };
+
+  const handleLogout=async()=>{
+    try{await apiLogout();}catch(e){/* clearing client state either way */}
+    setUser(null);
+    setComplaints([]);
+    setMyTickets([]);
+    setActiveTab('submit');
+  };
 
   return<div className="min-h-screen flex flex-col">
-    <Header activeTab={activeTab} setActiveTab={setActiveTab}/>
-    {apiError&&<div className="max-w-7xl mx-auto w-full px-4 pt-4"><ErrorBanner message={`${apiError} Start it with: bash scripts/run_api.sh`}/></div>}
+    <Header activeTab={activeTab} setActiveTab={setActiveTab} user={user} authChecked={authChecked} onLogout={handleLogout}/>
+    {authNotice&&<div className="max-w-7xl mx-auto w-full px-4 pt-4"><ErrorBanner message={authNotice}/></div>}
+    {apiError&&user?.role==='officer'&&<div className="max-w-7xl mx-auto w-full px-4 pt-4"><ErrorBanner message={`${apiError} Start it with: bash scripts/run_api.sh`}/></div>}
     <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
-      {activeTab==='submit'?<SubmitView onSubmitted={fetchComplaints}/>:<DashboardView complaints={complaints} loading={loading} onChanged={fetchComplaints}/>}
+      {activeTab==='submit'&&<SubmitView user={user} onSubmitted={handleSubmitted} onNavigate={setActiveTab}/>}
+      {activeTab==='dashboard'&&<DashboardView user={user} complaints={complaints} loading={loadingComplaints} onChanged={fetchComplaints}/>}
+      {activeTab==='mytickets'&&<MyTicketsView user={user} tickets={myTickets} loading={loadingMyTickets} onChanged={fetchMyTickets}/>}
+      {activeTab==='login'&&<LoginPage googleEnabled={googleEnabled} onAuthed={handleAuthed} onNavigate={setActiveTab}/>}
+      {activeTab==='register'&&<RegisterPage googleEnabled={googleEnabled} onAuthed={handleAuthed} onNavigate={setActiveTab}/>}
     </main>
     <footer className="border-t border-gray-200 bg-white/60 backdrop-blur py-4 mt-auto">
       <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-gray-400">

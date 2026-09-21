@@ -15,6 +15,10 @@ Responsibilities:
 - set_portal_submission(ticket_id, portal_name, portal_reference, portal_status)
   -> records the outcome of forwarding a ticket to a (simulated) gov portal
   adapter (see gov_portal.py — no real portal is ever contacted).
+- users (id, role, username, email, password_hash, google_sub, full_name,
+  phone, department, avatar_url, created_at, last_login_at) — citizen/officer
+  accounts (see nagrikmitra/auth.py, auth_routes.py). tickets.citizen_id is a
+  nullable FK onto this table; guest (unauthenticated) tickets leave it NULL.
 """
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -54,6 +58,21 @@ CREATE TABLE IF NOT EXISTS overrides (
     created_at TEXT,
     FOREIGN KEY (ticket_id) REFERENCES tickets(id)
 );
+
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    role TEXT NOT NULL CHECK(role IN ('citizen','officer')),
+    username TEXT UNIQUE,
+    email TEXT UNIQUE,
+    password_hash TEXT,
+    google_sub TEXT UNIQUE,
+    full_name TEXT,
+    phone TEXT,
+    department TEXT,
+    avatar_url TEXT,
+    created_at TEXT,
+    last_login_at TEXT
+);
 """
 
 # Columns added after the initial v1 schema. Added via ALTER TABLE for
@@ -65,6 +84,7 @@ _MIGRATIONS = [
     "ALTER TABLE tickets ADD COLUMN portal_name TEXT",
     "ALTER TABLE tickets ADD COLUMN portal_reference TEXT",
     "ALTER TABLE tickets ADD COLUMN portal_status TEXT",
+    "ALTER TABLE tickets ADD COLUMN citizen_id INTEGER",
 ]
 
 STATUSES = ["New", "In Progress", "Resolved"]
@@ -115,9 +135,11 @@ def save_ticket(
     channel: str = "web",
     name: str = "",
     location: str = "",
+    citizen_id: int = None,
 ) -> int:
     """Insert a new ticket and return its id. due_at is computed from
-    created_at + sla_hours."""
+    created_at + sla_hours. citizen_id is None for guest (unauthenticated)
+    submissions."""
     init_db()
     created_at = _utcnow()
     due_at = created_at + timedelta(hours=sla_hours)
@@ -129,8 +151,8 @@ def save_ticket(
             INSERT INTO tickets
                 (text, language, domain, department, priority, confidence,
                  needs_human, sla_hours, due_at, source, channel, created_at,
-                 status, name, location)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'New', ?, ?)
+                 status, name, location, citizen_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'New', ?, ?, ?)
             """,
             (
                 text,
@@ -147,6 +169,7 @@ def save_ticket(
                 created_at.isoformat(),
                 name or None,
                 location or None,
+                citizen_id,
             ),
         )
         conn.commit()
@@ -180,6 +203,20 @@ def list_tickets(filters: dict = None) -> list:
     conn = _connect()
     try:
         rows = conn.execute(query, params).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def list_tickets_for_citizen(citizen_id: int) -> list:
+    """List tickets filed by a specific logged-in citizen."""
+    init_db()
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM tickets WHERE citizen_id = ? ORDER BY created_at DESC",
+            (citizen_id,),
+        ).fetchall()
         return [dict(row) for row in rows]
     finally:
         conn.close()
@@ -327,5 +364,127 @@ def list_overrides(ticket_id: int = None) -> list:
                 "SELECT * FROM overrides ORDER BY created_at DESC"
             ).fetchall()
         return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------- users
+
+
+def create_user(
+    role: str,
+    full_name: str,
+    username: str = None,
+    email: str = None,
+    password_hash: str = None,
+    google_sub: str = None,
+    phone: str = "",
+    department: str = "",
+    avatar_url: str = "",
+) -> dict:
+    """Create a citizen or officer account. Raises sqlite3.IntegrityError if
+    username/email/google_sub already exists (UNIQUE constraints). Returns
+    the created user row."""
+    if role not in ("citizen", "officer"):
+        raise ValueError("role must be 'citizen' or 'officer'")
+    init_db()
+    created_at = _utcnow().isoformat()
+    conn = _connect()
+    try:
+        cur = conn.execute(
+            """
+            INSERT INTO users
+                (role, username, email, password_hash, google_sub, full_name,
+                 phone, department, avatar_url, created_at, last_login_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                role,
+                username or None,
+                email or None,
+                password_hash,
+                google_sub,
+                full_name,
+                phone or None,
+                department or None,
+                avatar_url or None,
+                created_at,
+                created_at,
+            ),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM users WHERE id = ?", (cur.lastrowid,)
+        ).fetchone()
+        return dict(row)
+    finally:
+        conn.close()
+
+
+def get_user_by_id(user_id: int) -> dict:
+    """Fetch a user by id, or None if not found."""
+    init_db()
+    conn = _connect()
+    try:
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def get_user_by_identifier(identifier: str) -> dict:
+    """Fetch a user by username OR email (for login), or None if not found."""
+    init_db()
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "SELECT * FROM users WHERE username = ? OR email = ?",
+            (identifier, identifier),
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def get_user_by_google_sub(google_sub: str) -> dict:
+    """Fetch a user by their linked Google account id, or None if not found."""
+    init_db()
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "SELECT * FROM users WHERE google_sub = ?", (google_sub,)
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def link_google_account(user_id: int, google_sub: str, avatar_url: str = "") -> dict:
+    """Attach a Google account id to an existing (password-based) user, e.g.
+    when the same email signs in with Google for the first time."""
+    init_db()
+    conn = _connect()
+    try:
+        conn.execute(
+            "UPDATE users SET google_sub = ?, avatar_url = COALESCE(?, avatar_url) WHERE id = ?",
+            (google_sub, avatar_url or None, user_id),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def touch_last_login(user_id: int) -> None:
+    """Update a user's last_login_at to now."""
+    init_db()
+    conn = _connect()
+    try:
+        conn.execute(
+            "UPDATE users SET last_login_at = ? WHERE id = ?",
+            (_utcnow().isoformat(), user_id),
+        )
+        conn.commit()
     finally:
         conn.close()

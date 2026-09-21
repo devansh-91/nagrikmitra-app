@@ -2,6 +2,7 @@
 .env.*
 !.env.example
 *.db
+.session_secret
 __pycache__/
 *.pyc
 .venv/
