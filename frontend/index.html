@@ -66,6 +66,8 @@ html.dark .bg-gray-200{background-color:#1e2e50}
 html.dark .bg-navy-50{background-color:#16223e}
 html.dark .bg-slate-200{background-color:#243456}
 html.dark .bg-saffron-50{background-color:#2a1d10}
+html.dark .border-saffron-100{border-color:#4a3018}
+html.dark .text-saffron-700{color:#fdba74}
 html.dark .bg-amber-50{background-color:#2a2210}
 html.dark .bg-red-50{background-color:#2a1416}
 html.dark .bg-green-50{background-color:#0f2418}
@@ -81,6 +83,23 @@ html.dark .bg-sky-100{background-color:#0f2740}
 html.dark .bg-cyan-100{background-color:#0d2a30}
 html.dark .bg-emerald-100{background-color:#0f2a20}
 html.dark .bg-orange-100{background-color:#2e2010}
+/* Badge/pill text (domainMeta, langMeta, statusMeta, priorityMeta all pair
+   a -700/-800 text with a -50/-100/-200 bg — light-mode-only combos that
+   were designed to read on a light bg, so once that bg flips dark via the
+   overrides above, the same dark text reads as dark-on-dark. Brighten each
+   to its ~300 tint instead of remapping every badge's classNames. */
+html.dark .text-blue-700{color:#93c5fd}
+html.dark .text-amber-700{color:#fcd34d}
+html.dark .text-amber-800{color:#fde68a}
+html.dark .text-cyan-700{color:#67e8f9}
+html.dark .text-purple-700{color:#d8b4fe}
+html.dark .text-red-700{color:#fca5a5}
+html.dark .text-emerald-700{color:#6ee7b7}
+html.dark .text-slate-700{color:#cbd5e1}
+html.dark .text-orange-700{color:#fdba74}
+html.dark .text-sky-700{color:#7dd3fc}
+html.dark .text-violet-700{color:#c4b5fd}
+html.dark .text-green-700{color:#86efac}
 html.dark .text-navy-800{color:#e9edf7}
 html.dark .text-navy-700{color:#d7deec}
 html.dark .text-navy-600{color:#b7c2d6}
@@ -96,6 +115,9 @@ html.dark .border-gray-200{border-color:#293b60}
 html.dark .border-gray-300{border-color:#334770}
 html.dark .border-gray-50{border-color:#1a2740}
 html.dark .border-navy-100{border-color:#22314f}
+html.dark .disabled\:bg-gray-200:disabled{background-color:#1e2e50}
+html.dark .disabled\:hover\:bg-gray-200:disabled:hover{background-color:#1e2e50}
+html.dark .disabled\:text-gray-400:disabled{color:#7889a8}
 html.dark select{background-color:transparent}
 html.dark input,html.dark textarea,html.dark select{color:#e9edf7}
 html.dark ::placeholder{color:#57678a}
@@ -197,6 +219,19 @@ function greeting(){
   const h=new Date().getHours();
   return h<12?'Good morning':h<17?'Good afternoon':'Good evening';
 }
+// Chart.js draws to canvas, so its colors can't be reached by the CSS
+// html.dark overrides — components that render a chart read this to pick
+// theme-appropriate colors themselves, and rebuild when it flips.
+function useIsDark(){
+  const[dark,setDark]=useState(()=>document.documentElement.classList.contains('dark'));
+  useEffect(()=>{
+    const el=document.documentElement;
+    const obs=new MutationObserver(()=>setDark(el.classList.contains('dark')));
+    obs.observe(el,{attributes:true,attributeFilter:['class']});
+    return()=>obs.disconnect();
+  },[]);
+  return dark;
+}
 function slaRemaining(c){
   if(c.status==='Resolved')return{text:'Resolved',expired:false};
   const due=parseUTC(c.due_at);
@@ -208,7 +243,7 @@ function slaRemaining(c){
 }
 
 /* ===== SHARED FORM STYLES ===== */
-const inputCls='w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-saffron-200 focus:border-saffron-500 outline-none transition text-gray-800 placeholder-gray-400 disabled:opacity-50';
+const inputCls='w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-saffron-200 focus:border-saffron-500 outline-none transition bg-white text-gray-800 placeholder-gray-400 disabled:opacity-50';
 const labelCls='block text-sm font-semibold text-gray-700 mb-1.5';
 
 /* ===== SMALL COMPONENTS ===== */
@@ -459,14 +494,14 @@ function SubmitView({user,onSubmitted,onNavigate}){
         <div className="w-10 h-10 rounded-xl bg-saffron-50 flex items-center justify-center"><i className="fas fa-comment-dots text-saffron-500"></i></div>
         <div><h2 className="font-display font-bold text-xl text-navy-800">File a Complaint</h2><p className="text-sm text-gray-500">Type in Hindi, English, or Hinglish — the classifier handles the rest</p></div>
       </div>
-      {!user&&<div className="mb-4 bg-saffron-50 border border-saffron-100 text-saffron-800 text-xs rounded-xl px-4 py-2.5 flex items-center gap-2">
+      {!user&&<div className="mb-4 bg-saffron-50 border border-saffron-100 text-saffron-700 text-xs rounded-xl px-4 py-2.5 flex items-center gap-2">
         <i className="fas fa-circle-info flex-shrink-0"></i>
         <span>Filing as a guest — that's fine, but <button type="button" onClick={()=>onNavigate('login')} className="underline font-semibold">signing in</button> lets you track your complaints under "My Complaints" later.</span>
       </div>}
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-1.5">Complaint Description <span className="text-red-400">*</span></label>
-          <textarea className="w-full h-36 px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-saffron-200 focus:border-saffron-500 outline-none transition resize-none text-gray-800 placeholder-gray-400" placeholder="e.g., Mere area mein sadak bahut tooti hui hai gadda hai... / The road near my house has big potholes... / मेरे मोहल्ले में पानी नहीं आ रहा..." value={text} onChange={e=>setText(e.target.value)} required disabled={pipeState!=='idle'}/>
+          <textarea className="w-full h-36 px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-saffron-200 focus:border-saffron-500 outline-none transition resize-none bg-white text-gray-800 placeholder-gray-400" placeholder="e.g., Mere area mein sadak bahut tooti hui hai gadda hai... / The road near my house has big potholes... / मेरे मोहल्ले में पानी नहीं आ रहा..." value={text} onChange={e=>setText(e.target.value)} required disabled={pipeState!=='idle'}/>
           <p className="mt-1 text-xs text-gray-400">Supports Devanagari script, English, and Romanized Hindi (Hinglish)</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -474,15 +509,15 @@ function SubmitView({user,onSubmitted,onNavigate}){
             <label className="block text-sm font-semibold text-gray-700 mb-1.5">Your Name</label>
             {user?
               <div className="w-full px-4 py-2.5 border-2 border-gray-100 rounded-xl bg-gray-50 text-gray-700 text-sm flex items-center gap-2"><i className="fas fa-circle-check text-civic-green"></i>{user.full_name}<span className="text-gray-400">(signed in)</span></div>
-              :<input type="text" className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-saffron-200 focus:border-saffron-500 outline-none transition text-gray-800 placeholder-gray-400" placeholder="Enter your name" value={name} onChange={e=>setName(e.target.value)} disabled={pipeState!=='idle'}/>}
+              :<input type="text" className={inputCls} placeholder="Enter your name" value={name} onChange={e=>setName(e.target.value)} disabled={pipeState!=='idle'}/>}
           </div>
-          <div><label className="block text-sm font-semibold text-gray-700 mb-1.5">Location</label><input type="text" className="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-saffron-200 focus:border-saffron-500 outline-none transition text-gray-800 placeholder-gray-400" placeholder="e.g., Sector 15, Lucknow" value={loc} onChange={e=>setLoc(e.target.value)} disabled={pipeState!=='idle'}/></div>
+          <div><label className="block text-sm font-semibold text-gray-700 mb-1.5">Location</label><input type="text" className={inputCls} placeholder="e.g., Sector 15, Lucknow" value={loc} onChange={e=>setLoc(e.target.value)} disabled={pipeState!=='idle'}/></div>
         </div>
         <label className="flex items-center gap-2 text-sm text-gray-600 select-none">
           <input type="checkbox" className="rounded border-gray-300 text-saffron-500 focus:ring-saffron-400" checked={useLlm} onChange={e=>setUseLlm(e.target.checked)} disabled={pipeState!=='idle'}/>
           Ask AI to polish the acknowledgment reply (optional — falls back to the template if unavailable)
         </label>
-        <button type="submit" disabled={!text.trim()||pipeState!=='idle'} className="w-full py-3.5 bg-navy-800 text-white font-display font-bold rounded-xl hover:bg-navy-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 text-sm">
+        <button type="submit" disabled={!text.trim()||pipeState!=='idle'} className="w-full py-3.5 bg-navy-800 text-white font-display font-bold rounded-xl hover:bg-navy-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:hover:bg-gray-200 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 text-sm">
           {pipeState==='idle'?<><i className="fas fa-paper-plane"></i>Submit &amp; Classify Complaint</>:<><i className="fas fa-spinner" style={{animation:'spin 1s linear infinite'}}></i>Processing through classification pipeline...</>}
         </button>
       </div>
@@ -516,34 +551,34 @@ function StatCard({icon,label,value,color,sub}){
 }
 
 function DomainChart({data}){
-  const ref=useRef(null);const chart=useRef(null);
+  const ref=useRef(null);const chart=useRef(null);const dark=useIsDark();
   useEffect(()=>{
     if(chart.current)chart.current.destroy();
     const counts={};data.forEach(c=>{counts[c.domain]=(counts[c.domain]||0)+1});
     const labels=Object.keys(counts),vals=Object.values(counts),colors=labels.map(l=>(domainMeta[l]||domainMeta[OTHER_DOMAIN]).chart);
-    chart.current=new Chart(ref.current,{type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:8,font:{size:10,family:'Noto Sans'},color:'#64748b'}}}}});
+    chart.current=new Chart(ref.current,{type:'doughnut',data:{labels,datasets:[{data:vals,backgroundColor:colors,borderWidth:2,borderColor:dark?'#141f38':'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:8,font:{size:10,family:'Noto Sans'},color:dark?'#93a1bc':'#64748b'}}}}});
     return()=>{if(chart.current)chart.current.destroy()};
-  },[data]);
+  },[data,dark]);
   return<div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100"><h3 className="font-display font-bold text-navy-800 mb-4 text-sm">By Domain</h3><div style={{height:220}}><canvas ref={ref}></canvas></div></div>;
 }
 function PriorityChart({data}){
-  const ref=useRef(null);const chart=useRef(null);
+  const ref=useRef(null);const chart=useRef(null);const dark=useIsDark();
   useEffect(()=>{
     if(chart.current)chart.current.destroy();
     const counts={High:0,Medium:0,Low:0};data.forEach(c=>{if(counts[c.priority]!==undefined)counts[c.priority]++});
-    chart.current=new Chart(ref.current,{type:'bar',data:{labels:['High','Medium','Low'],datasets:[{data:[counts.High,counts.Medium,counts.Low],backgroundColor:['#EF4444','#F59E0B','#10B981'],borderRadius:6,barThickness:40}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1,font:{size:10},color:'#94a3b8'},grid:{color:'#f1f5f9'}},x:{ticks:{font:{size:11,weight:'bold'},color:'#475569'},grid:{display:false}}}}});
+    chart.current=new Chart(ref.current,{type:'bar',data:{labels:['High','Medium','Low'],datasets:[{data:[counts.High,counts.Medium,counts.Low],backgroundColor:['#EF4444','#F59E0B','#10B981'],borderRadius:6,barThickness:40}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1,font:{size:10},color:dark?'#7889a8':'#94a3b8'},grid:{color:dark?'rgba(255,255,255,.07)':'#f1f5f9'}},x:{ticks:{font:{size:11,weight:'bold'},color:dark?'#cdd6e5':'#475569'},grid:{display:false}}}}});
     return()=>{if(chart.current)chart.current.destroy()};
-  },[data]);
+  },[data,dark]);
   return<div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100"><h3 className="font-display font-bold text-navy-800 mb-4 text-sm">By Priority</h3><div style={{height:220}}><canvas ref={ref}></canvas></div></div>;
 }
 function StatusChart({data}){
-  const ref=useRef(null);const chart=useRef(null);
+  const ref=useRef(null);const chart=useRef(null);const dark=useIsDark();
   useEffect(()=>{
     if(chart.current)chart.current.destroy();
     const counts={New:0,'In Progress':0,Resolved:0};data.forEach(c=>{if(counts[c.status]!==undefined)counts[c.status]++});
-    chart.current=new Chart(ref.current,{type:'doughnut',data:{labels:['New','In Progress','Resolved'],datasets:[{data:[counts.New,counts['In Progress'],counts.Resolved],backgroundColor:['#3B82F6','#F59E0B','#10B981'],borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:8,font:{size:10,family:'Noto Sans'},color:'#64748b'}}}}});
+    chart.current=new Chart(ref.current,{type:'doughnut',data:{labels:['New','In Progress','Resolved'],datasets:[{data:[counts.New,counts['In Progress'],counts.Resolved],backgroundColor:['#3B82F6','#F59E0B','#10B981'],borderWidth:2,borderColor:dark?'#141f38':'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:8,font:{size:10,family:'Noto Sans'},color:dark?'#93a1bc':'#64748b'}}}}});
     return()=>{if(chart.current)chart.current.destroy()};
-  },[data]);
+  },[data,dark]);
   return<div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100"><h3 className="font-display font-bold text-navy-800 mb-4 text-sm">By Status</h3><div style={{height:220}}><canvas ref={ref}></canvas></div></div>;
 }
 
@@ -672,13 +707,13 @@ function DashboardView({user,complaints,loading,onChanged}){
 
 /* ===== MY TICKETS (citizen dashboard) ===== */
 function MyStatusDonut({counts}){
-  const ref=useRef(null);const chart=useRef(null);
+  const ref=useRef(null);const chart=useRef(null);const dark=useIsDark();
   const entries=[['Resolved',counts.resolved,'#10B981'],['In Progress',counts.inProgress,'#3B82F6'],['Action Needed',counts.actionNeeded,'#EF4444'],['Others',counts.others,'#94A3B8']];
   useEffect(()=>{
     if(chart.current)chart.current.destroy();
-    chart.current=new Chart(ref.current,{type:'doughnut',data:{labels:entries.map(e=>e[0]),datasets:[{data:entries.map(e=>e[1]),backgroundColor:entries.map(e=>e[2]),borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,cutout:'72%',plugins:{legend:{display:false}}}});
+    chart.current=new Chart(ref.current,{type:'doughnut',data:{labels:entries.map(e=>e[0]),datasets:[{data:entries.map(e=>e[1]),backgroundColor:entries.map(e=>e[2]),borderWidth:2,borderColor:dark?'#141f38':'#fff'}]},options:{responsive:true,maintainAspectRatio:false,cutout:'72%',plugins:{legend:{display:false}}}});
     return()=>{if(chart.current)chart.current.destroy()};
-  },[counts.total,counts.resolved,counts.inProgress,counts.actionNeeded]);
+  },[counts.total,counts.resolved,counts.inProgress,counts.actionNeeded,dark]);
   return<div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
     <h3 className="font-display font-bold text-navy-800 mb-4 flex items-center gap-2"><i className="fas fa-list-check text-saffron-500"></i>Complaint Status</h3>
     <div className="relative mx-auto" style={{height:180,width:180}}>
@@ -907,7 +942,7 @@ function LoginPage({googleEnabled,onAuthed,onNavigate}){
         <label className={labelCls}>Officer Signup Code <span className="text-gray-400 font-normal">(only needed for Google sign-in)</span></label>
         <input type="text" value={officerCode} onChange={e=>setOfficerCode(e.target.value)} disabled={loading} className={inputCls}/>
       </div>}
-      <button type="submit" disabled={loading} className="w-full py-3 bg-navy-800 text-white font-display font-bold rounded-xl hover:bg-navy-700 disabled:opacity-50 transition-all">{loading?'Signing in…':'Sign In'}</button>
+      <button type="submit" disabled={loading} className="w-full py-3 bg-navy-800 text-white font-display font-bold rounded-xl hover:bg-navy-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:hover:bg-gray-200 transition-all">{loading?'Signing in…':'Sign In'}</button>
     </form>
     {googleEnabled&&<><GoogleSeparator/><GoogleButton role={role} officerCode={officerCode}/></>}
     <p className="text-center text-sm text-gray-500 mt-6">Don't have an account? <button type="button" onClick={()=>onNavigate('register')} className="text-saffron-600 font-semibold hover:underline">Register</button></p>
@@ -963,7 +998,7 @@ function RegisterPage({googleEnabled,onAuthed,onNavigate}){
         <input type="text" required value={officerCode} onChange={e=>setOfficerCode(e.target.value)} disabled={loading} className={inputCls}/>
         <p className="mt-1 text-xs text-gray-400">Ask your administrator for this code.</p>
       </div>}
-      <button type="submit" disabled={loading} className="w-full py-3 bg-navy-800 text-white font-display font-bold rounded-xl hover:bg-navy-700 disabled:opacity-50 transition-all">{loading?'Creating account…':'Create Account'}</button>
+      <button type="submit" disabled={loading} className="w-full py-3 bg-navy-800 text-white font-display font-bold rounded-xl hover:bg-navy-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:hover:bg-gray-200 transition-all">{loading?'Creating account…':'Create Account'}</button>
     </form>
     {googleEnabled&&<><GoogleSeparator/><GoogleButton role={role} officerCode={officerCode}/></>}
     <p className="text-center text-sm text-gray-500 mt-6">Already have an account? <button type="button" onClick={()=>onNavigate('login')} className="text-saffron-600 font-semibold hover:underline">Sign in</button></p>
@@ -1048,7 +1083,7 @@ function SiteFooter(){
         </div>
       </div>
     </div>
-    <div className="w-full h-32 sm:h-44 lg:h-56 bg-[#F0F3F8] dark:bg-navy-950 transition-colors overflow-hidden">
+    <div className="w-full h-28 sm:h-36 lg:h-44 xl:h-52 bg-[#F0F3F8] dark:bg-navy-950 transition-colors overflow-hidden">
       <img src="assets/footer-skyline-light.webp" alt="Illustration of a city skyline" className="w-full h-full object-cover object-bottom block dark:hidden"/>
       <img src="assets/footer-skyline-dark.webp" alt="Illustration of a city skyline" className="w-full h-full object-cover object-bottom hidden dark:block"/>
     </div>
@@ -1170,8 +1205,10 @@ function App(){
     {(activeTab==='login'||activeTab==='register')?
       <main className="flex-1 w-full grid lg:grid-cols-2">
         <AuthHero/>
-        <div className="flex items-center justify-center px-4 py-10 sm:py-16">
-          <div className="w-full max-w-md">
+        <div className="relative flex items-center justify-center px-4 py-10 sm:py-16 dot-bg overflow-hidden">
+          <div className="absolute top-10 right-10 w-64 h-64 rounded-full bg-saffron-200/30 dark:bg-saffron-500/10 blur-3xl pointer-events-none"></div>
+          <div className="absolute bottom-10 left-10 w-72 h-72 rounded-full bg-navy-300/20 dark:bg-navy-500/10 blur-3xl pointer-events-none"></div>
+          <div className="relative w-full max-w-md">
             {activeTab==='login'?<LoginPage googleEnabled={googleEnabled} onAuthed={handleAuthed} onNavigate={setActiveTab}/>:<RegisterPage googleEnabled={googleEnabled} onAuthed={handleAuthed} onNavigate={setActiveTab}/>}
           </div>
         </div>
