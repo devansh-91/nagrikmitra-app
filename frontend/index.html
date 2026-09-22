@@ -13,7 +13,16 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Noto+Sans:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script>
-tailwind.config={theme:{extend:{colors:{navy:{50:'#eef1f8',100:'#d8dfe9',200:'#b3bfda',300:'#8a9bc4',400:'#6178ae',500:'#3f578f',600:'#2d3f63',700:'#1f2e4d',800:'#1a2744',900:'#111c33',950:'#0a1120'},saffron:{50:'#fff7ed',100:'#ffedd5',200:'#fed7aa',300:'#fdba74',400:'#fb923c',500:'#E8751A',600:'#c2410c',700:'#9a3412'},civic:{green:'#1B7A6E','green-light':'#eefbf9'}},fontFamily:{display:['Outfit','sans-serif'],body:['"Noto Sans"','"Noto Sans Devanagari"','sans-serif']}}}}
+(function(){
+  try{
+    const saved=localStorage.getItem('nm-theme');
+    const dark=saved?saved==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if(dark)document.documentElement.classList.add('dark');
+  }catch(_){}
+})();
+</script>
+<script>
+tailwind.config={darkMode:'class',theme:{extend:{colors:{navy:{50:'#eef1f8',100:'#d8dfe9',200:'#b3bfda',300:'#8a9bc4',400:'#6178ae',500:'#3f578f',600:'#2d3f63',700:'#1f2e4d',800:'#1a2744',900:'#111c33',950:'#0a1120'},saffron:{50:'#fff7ed',100:'#ffedd5',200:'#fed7aa',300:'#fdba74',400:'#fb923c',500:'#E8751A',600:'#c2410c',700:'#9a3412'},civic:{green:'#1B7A6E','green-light':'#eefbf9'}},fontFamily:{display:['Outfit','sans-serif'],body:['"Noto Sans"','"Noto Sans Devanagari"','sans-serif']}}}}
 </script>
 <style>
 *{scrollbar-width:thin;scrollbar-color:#cbd5e1 transparent}
@@ -32,6 +41,66 @@ body{background:#F0F3F8}
 .dot-bg{background-image:radial-gradient(circle at 1px 1px,rgba(0,0,0,.025) 1px,transparent 0);background-size:20px 20px}
 select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;-webkit-appearance:none;appearance:none;padding-right:28px}
 @media(prefers-reduced-motion:reduce){*{animation-duration:0s!important;transition-duration:0s!important}}
+
+/* ===== DARK MODE =====
+   The page is styled with Tailwind's plain utility classes throughout
+   (bg-white, text-gray-500, ...), not dark: variants on every element.
+   Rather than retrofit hundreds of className strings, we override the
+   handful of light-mode utility classes actually in use with a higher-
+   specificity `html.dark .utility{...}` rule per class — same visual
+   result, far smaller diff. */
+:root{color-scheme:light}
+html.dark{color-scheme:dark}
+html.dark body{background:#0a1120}
+html.dark .dot-bg{background-image:radial-gradient(circle at 1px 1px,rgba(255,255,255,.035) 1px,transparent 0)}
+html.dark ::-webkit-scrollbar-thumb{background-color:#334155}
+html.dark{scrollbar-color:#334155 transparent}
+html.dark .bg-white{background-color:#141f38}
+html.dark .bg-white\/60{background-color:rgba(20,31,56,.7)}
+html.dark .bg-white\/70{background-color:rgba(20,31,56,.75)}
+html.dark .bg-white\/10{background-color:rgba(255,255,255,.06)}
+html.dark .bg-white\/20{background-color:rgba(255,255,255,.1)}
+html.dark .bg-gray-50{background-color:#101a30}
+html.dark .bg-gray-100{background-color:#182543}
+html.dark .bg-gray-200{background-color:#1e2e50}
+html.dark .bg-navy-50{background-color:#16223e}
+html.dark .bg-slate-200{background-color:#243456}
+html.dark .bg-saffron-50{background-color:#2a1d10}
+html.dark .bg-amber-50{background-color:#2a2210}
+html.dark .bg-red-50{background-color:#2a1416}
+html.dark .bg-green-50{background-color:#0f2418}
+html.dark .bg-blue-50{background-color:#0f1e30}
+html.dark .bg-civic-green-light{background-color:#0e2624}
+html.dark .bg-blue-100{background-color:#132a4a}
+html.dark .bg-amber-100{background-color:#2e230f}
+html.dark .bg-red-100{background-color:#2e1417}
+html.dark .bg-green-100{background-color:#102a1b}
+html.dark .bg-purple-100{background-color:#22183a}
+html.dark .bg-violet-100{background-color:#22183a}
+html.dark .bg-sky-100{background-color:#0f2740}
+html.dark .bg-cyan-100{background-color:#0d2a30}
+html.dark .bg-emerald-100{background-color:#0f2a20}
+html.dark .bg-orange-100{background-color:#2e2010}
+html.dark .text-navy-800{color:#e9edf7}
+html.dark .text-navy-700{color:#d7deec}
+html.dark .text-navy-600{color:#b7c2d6}
+html.dark .text-gray-800{color:#e5eaf3}
+html.dark .text-gray-700{color:#cdd6e5}
+html.dark .text-gray-600{color:#b3bfd4}
+html.dark .text-gray-500{color:#93a1bc}
+html.dark .text-gray-400{color:#7889a8}
+html.dark .text-gray-300{color:#63749a}
+html.dark .placeholder-gray-400::placeholder{color:#57678a}
+html.dark .border-gray-100{border-color:#22314f}
+html.dark .border-gray-200{border-color:#293b60}
+html.dark .border-gray-300{border-color:#334770}
+html.dark .border-gray-50{border-color:#1a2740}
+html.dark .border-navy-100{border-color:#22314f}
+html.dark select{background-color:transparent}
+html.dark input,html.dark textarea,html.dark select{color:#e9edf7}
+html.dark ::placeholder{color:#57678a}
+html.dark .shadow-lg,html.dark .shadow-2xl{--tw-shadow-color:rgba(0,0,0,.6)}
+body,.bg-white,.bg-gray-50,.bg-gray-100,.bg-gray-200,.bg-navy-50,.border-gray-100,.border-gray-200,.border-gray-300{transition:background-color .25s ease,border-color .25s ease,color .25s ease}
 </style>
 </head>
 <body class="font-body min-h-screen dot-bg">
@@ -743,7 +812,7 @@ function navItemsFor(user){
   return items;
 }
 
-function Header({activeTab,setActiveTab,user,authChecked,onLogout}){
+function Header({activeTab,setActiveTab,user,authChecked,onLogout,dark,onToggleDark}){
   const navItems=navItemsFor(user);
   return<header className="header-bg text-white shadow-2xl sticky top-0 z-40">
     <div className="max-w-7xl mx-auto px-4">
@@ -759,6 +828,9 @@ function Header({activeTab,setActiveTab,user,authChecked,onLogout}){
         </nav>
         <div className="flex items-center gap-2 sm:gap-3">
           <div className="hidden lg:flex items-center gap-1.5 bg-white/10 backdrop-blur px-3 py-1.5 rounded-full"><i className="fas fa-bolt text-saffron-400 text-xs"></i><span className="text-[10px] font-bold text-navy-200 tracking-wide">ML POWERED</span></div>
+          <button onClick={onToggleDark} title={dark?'Switch to light mode':'Switch to dark mode'} aria-label="Toggle dark mode" className="w-9 h-9 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
+            <i className={`fas ${dark?'fa-sun text-saffron-400':'fa-moon'} text-sm`}></i>
+          </button>
           {authChecked&&(user?
             <div className="flex items-center gap-2">
               <div className="hidden sm:flex items-center gap-2 bg-white/10 backdrop-blur rounded-full pl-1 pr-3 py-1">
@@ -788,6 +860,13 @@ function Header({activeTab,setActiveTab,user,authChecked,onLogout}){
 /* ===== APP ===== */
 function App(){
   const[activeTab,setActiveTab]=useState('submit');
+  const[dark,setDark]=useState(()=>{
+    try{
+      const saved=localStorage.getItem('nm-theme');
+      if(saved)return saved==='dark';
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }catch(_){return false;}
+  });
   const[user,setUser]=useState(null);
   const[authChecked,setAuthChecked]=useState(false);
   const[googleEnabled,setGoogleEnabled]=useState(false);
@@ -807,6 +886,11 @@ function App(){
       setAuthChecked(true);
     }
   },[]);
+
+  useEffect(()=>{
+    document.documentElement.classList.toggle('dark',dark);
+    try{localStorage.setItem('nm-theme',dark?'dark':'light');}catch(_){}
+  },[dark]);
 
   useEffect(()=>{
     refreshMe();
@@ -879,7 +963,7 @@ function App(){
   };
 
   return<div className="min-h-screen flex flex-col">
-    <Header activeTab={activeTab} setActiveTab={setActiveTab} user={user} authChecked={authChecked} onLogout={handleLogout}/>
+    <Header activeTab={activeTab} setActiveTab={setActiveTab} user={user} authChecked={authChecked} onLogout={handleLogout} dark={dark} onToggleDark={()=>setDark(d=>!d)}/>
     {authNotice&&<div className="max-w-7xl mx-auto w-full px-4 pt-4"><ErrorBanner message={authNotice}/></div>}
     {apiError&&user?.role==='officer'&&<div className="max-w-7xl mx-auto w-full px-4 pt-4"><ErrorBanner message={`${apiError} Start it with: bash scripts/run_api.sh`}/></div>}
     <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
@@ -890,9 +974,8 @@ function App(){
       {activeTab==='register'&&<RegisterPage googleEnabled={googleEnabled} onAuthed={handleAuthed} onNavigate={setActiveTab}/>}
     </main>
     <footer className="border-t border-gray-200 bg-white/60 backdrop-blur py-4 mt-auto">
-      <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-gray-400">
+      <div className="max-w-7xl mx-auto px-4 flex items-center justify-center text-xs text-gray-400">
         <span className="font-display font-semibold text-gray-500">Nagarik Mitra v1.0</span>
-        <span>B.Tech CSE (AI/ML) demo project — classification via TF-IDF + scikit-learn, not a CPGRAMS replacement.</span>
       </div>
     </footer>
   </div>;
