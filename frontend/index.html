@@ -193,6 +193,10 @@ function timeAgo(iso){
   const h=Math.floor(m/60);if(h<24)return h+'h ago';
   const dd=Math.floor(h/24);return dd+'d ago';
 }
+function greeting(){
+  const h=new Date().getHours();
+  return h<12?'Good morning':h<17?'Good afternoon':'Good evening';
+}
 function slaRemaining(c){
   if(c.status==='Resolved')return{text:'Resolved',expired:false};
   const due=parseUTC(c.due_at);
@@ -370,6 +374,11 @@ function ResultCard({result,onReset}){
 }
 
 /* ===== SUBMIT VIEW ===== */
+const submitFeatures=[
+  {icon:'fa-bolt',title:'Simple & Fast',desc:'File a complaint in seconds'},
+  {icon:'fa-bullseye',title:'Tracked & Transparent',desc:'Get updates on progress'},
+  {icon:'fa-people-group',title:'Stronger Communities',desc:'Together for a better tomorrow'}
+];
 function SubmitView({user,onSubmitted,onNavigate}){
   const[text,setText]=useState('');
   const[name,setName]=useState('');
@@ -423,8 +432,27 @@ function SubmitView({user,onSubmitted,onNavigate}){
     onSubmitted();
   };
 
-  return<div className="max-w-3xl mx-auto space-y-6">
+  return<div className="max-w-6xl mx-auto">
     <Toast message="Complaint submitted and routed successfully!" visible={toast}/>
+    <div className="grid lg:grid-cols-[320px_1fr] gap-8 items-start">
+      <div className="hidden lg:block space-y-6 sticky top-24">
+        <div>
+          <div className="flex items-center gap-2 mb-3"><span className="w-8 h-px bg-saffron-500"></span><span className="text-[10px] font-bold tracking-[0.2em] text-gray-400">REPORT · TRACK · RESOLVE</span></div>
+          <h2 className="font-display text-3xl font-extrabold text-navy-800 leading-tight mb-3">A Cleaner, Safer<br/><span className="text-saffron-500">Better Tomorrow</span></h2>
+          <p className="text-sm text-gray-500 leading-relaxed">Report civic issues in your area and help us build a better city for everyone.</p>
+        </div>
+        <div className="space-y-3">
+          {submitFeatures.map((f,i)=><div key={i} className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-saffron-50 flex items-center justify-center flex-shrink-0"><i className={`fas ${f.icon} text-saffron-500 text-sm`}></i></div>
+            <div><p className="text-sm font-bold text-navy-800">{f.title}</p><p className="text-xs text-gray-500">{f.desc}</p></div>
+          </div>)}
+        </div>
+        <blockquote className="border-l-2 border-saffron-500 pl-4 text-sm text-gray-500 italic">
+          "Clean cities are built not by governments alone, but by citizens who care."
+          <footer className="mt-1 not-italic text-xs text-gray-400">— A Cleaner, Healthier, Happier India</footer>
+        </blockquote>
+      </div>
+      <div className="space-y-6">
     {errorMsg&&<ErrorBanner message={errorMsg}/>}
     <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
       <div className="flex items-center gap-3 mb-4">
@@ -474,6 +502,8 @@ function SubmitView({user,onSubmitted,onNavigate}){
         <div className="flex gap-3"><span className="flex-shrink-0 w-6 h-6 rounded-full bg-saffron-50 text-saffron-600 flex items-center justify-center text-xs font-bold">5</span><div><strong className="text-navy-800">Department Routing</strong> — A frozen taxonomy lookup (<code>config/taxonomy.yaml</code>) maps the classified domain to its municipal department.</div></div>
       </div>
     </details>
+      </div>
+    </div>
   </div>;
 }
 
@@ -560,6 +590,17 @@ function DashboardView({user,complaints,loading,onChanged}){
   const selCls='text-xs font-medium px-3 py-2 border border-gray-200 rounded-lg bg-white text-gray-700 focus:ring-2 focus:ring-saffron-200 focus:border-saffron-500 outline-none transition';
 
   return<div className="space-y-6">
+    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div>
+        <p className="text-sm text-gray-400">{greeting()},</p>
+        <h2 className="font-display text-2xl font-extrabold text-navy-800">{user.full_name} <span className="inline-block">👋</span></h2>
+        <p className="text-sm text-gray-500 mt-1">Here's an overview of civic complaints and their current status.</p>
+      </div>
+      <div className="bg-gray-50 border border-gray-100 rounded-xl px-5 py-3 flex items-start gap-3 max-w-sm">
+        <i className="fas fa-quote-left text-saffron-400 text-lg"></i>
+        <p className="text-sm font-semibold text-navy-800 leading-snug">Efficient governance builds stronger communities.</p>
+      </div>
+    </div>
     {actionError&&<ErrorBanner message={actionError}/>}
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       <StatCard icon='fa-clipboard-list' label='Total Complaints' value={total} color='navy' sub='All time'/>
@@ -629,43 +670,132 @@ function DashboardView({user,complaints,loading,onChanged}){
   </div>;
 }
 
-/* ===== MY TICKETS (citizen) ===== */
+/* ===== MY TICKETS (citizen dashboard) ===== */
+function MyStatusDonut({counts}){
+  const ref=useRef(null);const chart=useRef(null);
+  const entries=[['Resolved',counts.resolved,'#10B981'],['In Progress',counts.inProgress,'#3B82F6'],['Action Needed',counts.actionNeeded,'#EF4444'],['Others',counts.others,'#94A3B8']];
+  useEffect(()=>{
+    if(chart.current)chart.current.destroy();
+    chart.current=new Chart(ref.current,{type:'doughnut',data:{labels:entries.map(e=>e[0]),datasets:[{data:entries.map(e=>e[1]),backgroundColor:entries.map(e=>e[2]),borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,cutout:'72%',plugins:{legend:{display:false}}}});
+    return()=>{if(chart.current)chart.current.destroy()};
+  },[counts.total,counts.resolved,counts.inProgress,counts.actionNeeded]);
+  return<div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+    <h3 className="font-display font-bold text-navy-800 mb-4 flex items-center gap-2"><i className="fas fa-list-check text-saffron-500"></i>Complaint Status</h3>
+    <div className="relative mx-auto" style={{height:180,width:180}}>
+      <canvas ref={ref}></canvas>
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <p className="text-2xl font-display font-extrabold text-navy-800">{counts.total}</p>
+        <p className="text-[10px] text-gray-400 uppercase tracking-wide">Total</p>
+      </div>
+    </div>
+    <div className="mt-5 space-y-2">
+      {entries.map(([l,v,c],i)=><div key={i} className="flex items-center justify-between text-xs">
+        <span className="flex items-center gap-2 text-gray-600"><span className="w-2.5 h-2.5 rounded-full" style={{background:c}}></span>{l}</span>
+        <span className="font-bold text-navy-800">{v}</span>
+      </div>)}
+    </div>
+  </div>;
+}
+
+function ImpactRow({icon,iconBg,title,desc}){
+  return<div className="flex items-start gap-3">
+    <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${iconBg}`}><i className={`fas ${icon}`}></i></div>
+    <div><p className="text-sm font-bold text-navy-800">{title}</p><p className="text-xs text-gray-500">{desc}</p></div>
+  </div>;
+}
+
 function MyTicketsView({user,tickets,loading,onChanged}){
+  const[showAll,setShowAll]=useState(false);
+  const[expandedId,setExpandedId]=useState(null);
+
   if(!user||user.role!=='citizen'){
     return<div className="max-w-md mx-auto text-center py-20">
       <i className="fas fa-lock text-3xl text-gray-300 mb-3 block"></i>
-      <p className="text-gray-500 text-sm">Sign in as a citizen to see your complaints.</p>
+      <p className="text-gray-500 text-sm">Sign in as a citizen to see your dashboard.</p>
     </div>;
   }
-  return<div className="max-w-5xl mx-auto space-y-4">
-    <div className="flex items-center justify-between">
-      <h2 className="font-display font-bold text-xl text-navy-800">My Complaints</h2>
-      <button onClick={onChanged} className="text-xs font-medium px-3 py-2 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 flex items-center gap-1.5"><i className="fas fa-rotate-right text-[10px]"></i>Refresh</button>
-    </div>
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px]">
-          <thead><tr className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-gray-50">
-            <th className="px-4 py-3">ID</th><th className="px-4 py-3">Complaint</th><th className="px-4 py-3">Domain</th><th className="px-4 py-3">Priority</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Portal (Simulated)</th><th className="px-4 py-3">SLA</th><th className="px-4 py-3">Submitted</th>
-          </tr></thead>
-          <tbody>{tickets.map(c=>{
-            const sla=slaRemaining(c);
-            const dm=domainMeta[c.domain]||domainMeta[OTHER_DOMAIN];
-            return<tr key={c.id} className="border-t border-gray-50 hover:bg-gray-50/50 transition-colors">
-              <td className="px-4 py-3 text-xs font-mono text-gray-400">#{c.id}</td>
-              <td className="px-4 py-3 text-sm text-gray-700 max-w-[240px] truncate" title={c.text}>{c.text}</td>
-              <td className="px-4 py-3"><Badge label={c.domain} meta={dm}/></td>
-              <td className="px-4 py-3"><Badge label={c.priority} meta={priorityMeta[c.priority]}/></td>
-              <td className="px-4 py-3"><Badge label={c.status} meta={statusMeta[c.status]||statusMeta.New}/></td>
-              <td className="px-4 py-3 text-xs">{c.portal_reference?<span className="text-gray-600 font-mono">{c.portal_reference}</span>:<span className="text-gray-300">—</span>}</td>
-              <td className="px-4 py-3"><span className={`text-xs font-bold ${sla.expired?'text-red-600':'text-gray-600'}`}>{sla.expired&&<i className="fas fa-exclamation-circle mr-1"></i>}{sla.text}</span></td>
-              <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">{timeAgo(c.created_at)}</td>
-            </tr>;
-          })}</tbody>
-        </table>
-        {!loading&&tickets.length===0&&<div className="py-12 text-center text-gray-400 text-sm"><i className="fas fa-inbox text-2xl mb-2 block"></i>You haven't filed any complaints yet.</div>}
-        {loading&&tickets.length===0&&<div className="py-12 text-center text-gray-400 text-sm"><i className="fas fa-spinner text-2xl mb-2 block" style={{animation:'spin 1s linear infinite'}}></i>Loading…</div>}
+
+  const total=tickets.length;
+  const resolved=tickets.filter(t=>t.status==='Resolved').length;
+  const inProgress=tickets.filter(t=>t.status==='In Progress').length;
+  const actionNeeded=tickets.filter(t=>t.status!=='Resolved'&&slaRemaining(t).expired).length;
+  const others=Math.max(0,total-resolved-inProgress-actionNeeded);
+  const departmentsEngaged=new Set(tickets.map(t=>(domainMeta[t.domain]||domainMeta[OTHER_DOMAIN]).short)).size;
+  const visible=showAll?tickets:tickets.slice(0,5);
+
+  return<div className="max-w-7xl mx-auto space-y-6">
+    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div>
+        <p className="text-sm text-gray-400">Welcome back,</p>
+        <h2 className="font-display text-2xl font-extrabold text-navy-800">{user.full_name} <span className="inline-block">👋</span></h2>
+        <p className="text-sm text-gray-500 mt-1">Here's an overview of your complaints and their progress.</p>
       </div>
+      <div className="bg-gray-50 border border-gray-100 rounded-xl px-5 py-3 flex items-start gap-3 max-w-sm">
+        <i className="fas fa-quote-left text-saffron-400 text-lg"></i>
+        <p className="text-sm font-semibold text-navy-800 leading-snug">Small complaints, big change.</p>
+      </div>
+    </div>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="lg:col-span-2 space-y-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <StatCard icon='fa-file-lines' label='Total Complaints' value={total} color='navy' sub={total?`${resolved} resolved so far`:'None yet'}/>
+          <StatCard icon='fa-clock' label='In Progress' value={inProgress} color='blue' sub='Being addressed'/>
+          <StatCard icon='fa-circle-check' label='Resolved' value={resolved} color='green' sub={resolved?'Keep it up!':'—'}/>
+          <StatCard icon='fa-triangle-exclamation' label='Action Needed' value={actionNeeded} color='red' sub={actionNeeded?'Requires attention':'All clear'}/>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+            <div><h3 className="font-display font-bold text-navy-800">{showAll?'All Complaints':'Recent Complaints'}</h3><p className="text-xs text-gray-400 mt-0.5">Your latest submitted complaints and their status.</p></div>
+            <div className="flex items-center gap-2">
+              <button onClick={onChanged} className="text-xs font-medium px-3 py-2 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 flex items-center gap-1.5"><i className="fas fa-rotate-right text-[10px]"></i>Refresh</button>
+              {total>5&&<button onClick={()=>setShowAll(s=>!s)} className="text-xs font-bold text-saffron-600 hover:text-saffron-700 flex items-center gap-1.5">{showAll?'Show Recent':'View All'}<i className="fas fa-arrow-right text-[10px]"></i></button>}
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px]">
+              <thead><tr className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-gray-50">
+                <th className="px-4 py-3">#</th><th className="px-4 py-3">Complaint</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Submitted</th><th className="px-4 py-3">Action</th>
+              </tr></thead>
+              <tbody>{visible.map(c=>{
+                const sla=slaRemaining(c);
+                const dm=domainMeta[c.domain]||domainMeta[OTHER_DOMAIN];
+                const open=expandedId===c.id;
+                return<React.Fragment key={c.id}>
+                  <tr className="border-t border-gray-50 hover:bg-gray-50/50 transition-colors">
+                    <td className="px-4 py-3 text-xs font-mono text-gray-400">#{c.id}</td>
+                    <td className="px-4 py-3 text-sm text-gray-700 max-w-[220px] truncate" title={c.text}>{c.text}</td>
+                    <td className="px-4 py-3"><Badge label={c.domain} meta={dm}/></td>
+                    <td className="px-4 py-3"><Badge label={c.status} meta={statusMeta[c.status]||statusMeta.New}/></td>
+                    <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">{timeAgo(c.created_at)}</td>
+                    <td className="px-4 py-3"><button onClick={()=>setExpandedId(open?null:c.id)} className="text-xs font-bold px-3 py-1.5 rounded-lg border border-gray-200 text-navy-700 hover:bg-gray-50">{open?'Hide':'View'}</button></td>
+                  </tr>
+                  {open&&<tr className="bg-gray-50/60 border-t border-gray-50">
+                    <td colSpan={6} className="px-4 py-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                        <div><p className="text-gray-400 uppercase tracking-wide text-[10px] mb-1">Priority</p><Badge label={c.priority} meta={priorityMeta[c.priority]}/></div>
+                        <div><p className="text-gray-400 uppercase tracking-wide text-[10px] mb-1">Department</p><p className="font-semibold text-navy-800">{dm.short}</p></div>
+                        <div><p className="text-gray-400 uppercase tracking-wide text-[10px] mb-1">SLA</p><p className={`font-bold ${sla.expired?'text-red-600':'text-gray-600'}`}>{sla.expired&&<i className="fas fa-exclamation-circle mr-1"></i>}{sla.text}</p></div>
+                        <div><p className="text-gray-400 uppercase tracking-wide text-[10px] mb-1">Portal Ref. (Simulated)</p><p className="font-mono text-gray-600">{c.portal_reference||'—'}</p></div>
+                      </div>
+                    </td>
+                  </tr>}
+                </React.Fragment>;
+              })}</tbody>
+            </table>
+            {!loading&&tickets.length===0&&<div className="py-12 text-center text-gray-400 text-sm"><i className="fas fa-inbox text-2xl mb-2 block"></i>You haven't filed any complaints yet.</div>}
+            {loading&&tickets.length===0&&<div className="py-12 text-center text-gray-400 text-sm"><i className="fas fa-spinner text-2xl mb-2 block" style={{animation:'spin 1s linear infinite'}}></i>Loading…</div>}
+          </div>
+        </div>
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+          <h3 className="font-display font-bold text-navy-800 mb-4 flex items-center gap-2"><i className="fas fa-seedling text-civic-green"></i>Your Impact</h3>
+          <div className="grid sm:grid-cols-3 gap-5">
+            <ImpactRow icon='fa-check' iconBg='bg-civic-green/10 text-civic-green' title={`${resolved} issue${resolved===1?'':'s'} resolved`} desc="You're making a difference"/>
+            <ImpactRow icon='fa-building-columns' iconBg='bg-saffron-50 text-saffron-600' title={`${departmentsEngaged} department${departmentsEngaged===1?'':'s'} engaged`} desc="Across multiple civic domains"/>
+            <ImpactRow icon='fa-people-group' iconBg='bg-blue-50 text-blue-600' title="Cleaner, safer neighborhood" desc="Thank you for being an active citizen"/>
+          </div>
+        </div>
+      </div>
+      <MyStatusDonut counts={{total,resolved,inProgress,actionNeeded,others}}/>
     </div>
   </div>;
 }
@@ -707,6 +837,43 @@ function AuthCard({icon,iconBg,title,subtitle,children}){
 
 function GoogleSeparator(){
   return<div className="flex items-center gap-3 my-4"><div className="flex-1 h-px bg-gray-100"></div><span className="text-xs text-gray-400">or</span><div className="flex-1 h-px bg-gray-100"></div></div>;
+}
+
+const authFeatures=[
+  {icon:'fa-file-lines',title:'Report Issues',desc:'In your language, in seconds'},
+  {icon:'fa-bullseye',title:'Track Progress',desc:'Get real-time updates'},
+  {icon:'fa-people-group',title:'Stronger Communities',desc:'Together for a better tomorrow'}
+];
+const authStats=[{v:'7',l:'Civic Domains'},{v:'3',l:'Languages Supported'},{v:'ML',l:'Powered Routing'}];
+
+function AuthHero(){
+  return<div className="hidden lg:flex relative overflow-hidden header-bg text-white flex-col justify-between px-12 py-14">
+    <div className="absolute inset-0 dot-bg opacity-10 pointer-events-none"></div>
+    <div className="relative z-10 anim-slide-up">
+      <div className="flex items-center gap-2 mb-6">
+        <span className="w-8 h-px bg-saffron-500"></span>
+        <span className="text-[11px] font-bold tracking-[0.25em] text-navy-300">PEOPLE · TECHNOLOGY · BETTER CITIES</span>
+      </div>
+      <h2 className="font-display text-4xl font-extrabold leading-tight mb-4">Your Voice<br/><span className="text-saffron-400">A Stronger Tomorrow</span></h2>
+      <p className="text-navy-200 text-sm leading-relaxed max-w-sm mb-8">Report civic issues, track their progress, and help build cleaner, safer, and more livable cities for everyone.</p>
+      <div className="space-y-4 mb-8">
+        {authFeatures.map((f,i)=><div key={i} className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0"><i className={`fas ${f.icon} text-saffron-400 text-sm`}></i></div>
+          <div><p className="text-sm font-bold">{f.title}</p><p className="text-xs text-navy-300">{f.desc}</p></div>
+        </div>)}
+      </div>
+      <blockquote className="border-l-2 border-saffron-500 pl-4 text-sm text-navy-200 italic max-w-sm">
+        "Clean cities are built not by governments alone, but by citizens who care."
+        <footer className="mt-1 not-italic text-xs text-navy-400">— A Cleaner, Healthier, Happier India</footer>
+      </blockquote>
+    </div>
+    <div className="relative z-10 flex items-center gap-6">
+      {authStats.map((s,i)=><React.Fragment key={i}>
+        {i>0&&<span className="w-px h-8 bg-white/10"></span>}
+        <div><p className="font-display text-xl font-extrabold text-white">{s.v}</p><p className="text-[11px] text-navy-300">{s.l}</p></div>
+      </React.Fragment>)}
+    </div>
+  </div>;
 }
 
 function LoginPage({googleEnabled,onAuthed,onNavigate}){
@@ -806,9 +973,10 @@ function RegisterPage({googleEnabled,onAuthed,onNavigate}){
 
 /* ===== HEADER ===== */
 function navItemsFor(user){
+  // Officers review and route complaints — they don't file their own, so no Submit tab for them.
+  if(user?.role==='officer')return[{k:'dashboard',icon:'fa-chart-pie',l:'Dashboard'}];
   const items=[{k:'submit',icon:'fa-pen-to-square',l:'Submit'}];
-  if(user?.role==='officer')items.push({k:'dashboard',icon:'fa-chart-pie',l:'Dashboard'});
-  else if(user?.role==='citizen')items.push({k:'mytickets',icon:'fa-list-check',l:'My Complaints'});
+  if(user?.role==='citizen')items.push({k:'mytickets',icon:'fa-list-check',l:'My Complaints'});
   return items;
 }
 
@@ -879,7 +1047,10 @@ function App(){
 
   const refreshMe=useCallback(async()=>{
     try{
-      setUser(await apiMe());
+      const u=await apiMe();
+      setUser(u);
+      // Officers land on the dashboard, not the (citizen-only) submit form.
+      if(u.role==='officer')setActiveTab(t=>t==='submit'?'dashboard':t);
     }catch(e){
       setUser(null); // 401 just means no session — not an error to show
     }finally{
@@ -966,16 +1137,24 @@ function App(){
     <Header activeTab={activeTab} setActiveTab={setActiveTab} user={user} authChecked={authChecked} onLogout={handleLogout} dark={dark} onToggleDark={()=>setDark(d=>!d)}/>
     {authNotice&&<div className="max-w-7xl mx-auto w-full px-4 pt-4"><ErrorBanner message={authNotice}/></div>}
     {apiError&&user?.role==='officer'&&<div className="max-w-7xl mx-auto w-full px-4 pt-4"><ErrorBanner message={`${apiError} Start it with: bash scripts/run_api.sh`}/></div>}
-    <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
-      {activeTab==='submit'&&<SubmitView user={user} onSubmitted={handleSubmitted} onNavigate={setActiveTab}/>}
-      {activeTab==='dashboard'&&<DashboardView user={user} complaints={complaints} loading={loadingComplaints} onChanged={fetchComplaints}/>}
-      {activeTab==='mytickets'&&<MyTicketsView user={user} tickets={myTickets} loading={loadingMyTickets} onChanged={fetchMyTickets}/>}
-      {activeTab==='login'&&<LoginPage googleEnabled={googleEnabled} onAuthed={handleAuthed} onNavigate={setActiveTab}/>}
-      {activeTab==='register'&&<RegisterPage googleEnabled={googleEnabled} onAuthed={handleAuthed} onNavigate={setActiveTab}/>}
-    </main>
+    {(activeTab==='login'||activeTab==='register')?
+      <main className="flex-1 w-full grid lg:grid-cols-2">
+        <AuthHero/>
+        <div className="flex items-center justify-center px-4 py-10 sm:py-16">
+          <div className="w-full max-w-md">
+            {activeTab==='login'?<LoginPage googleEnabled={googleEnabled} onAuthed={handleAuthed} onNavigate={setActiveTab}/>:<RegisterPage googleEnabled={googleEnabled} onAuthed={handleAuthed} onNavigate={setActiveTab}/>}
+          </div>
+        </div>
+      </main>
+      :<main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
+        {activeTab==='submit'&&user?.role!=='officer'&&<SubmitView user={user} onSubmitted={handleSubmitted} onNavigate={setActiveTab}/>}
+        {activeTab==='dashboard'&&<DashboardView user={user} complaints={complaints} loading={loadingComplaints} onChanged={fetchComplaints}/>}
+        {activeTab==='mytickets'&&<MyTicketsView user={user} tickets={myTickets} loading={loadingMyTickets} onChanged={fetchMyTickets}/>}
+      </main>
+    }
     <footer className="border-t border-gray-200 bg-white/60 backdrop-blur py-4 mt-auto">
       <div className="max-w-7xl mx-auto px-4 flex items-center justify-center text-xs text-gray-400">
-        <span className="font-display font-semibold text-gray-500">Nagarik Mitra v1.0</span>
+        <span className="font-display font-semibold text-gray-500">Nagarik Mitra v3.0 · Making Cities More Livable, Together</span>
       </div>
     </footer>
   </div>;
