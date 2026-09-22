@@ -438,7 +438,7 @@ function SubmitView({user,onSubmitted,onNavigate}){
       <div className="hidden lg:block space-y-6 sticky top-24">
         <div>
           <div className="flex items-center gap-2 mb-3"><span className="w-8 h-px bg-saffron-500"></span><span className="text-[10px] font-bold tracking-[0.2em] text-gray-400">REPORT · TRACK · RESOLVE</span></div>
-          <h2 className="font-display text-3xl font-extrabold text-navy-800 leading-tight mb-3">A Cleaner, Safer<br/><span className="text-saffron-500">Better Tomorrow</span></h2>
+          <h2 className="font-display text-4xl font-extrabold text-navy-800 leading-[1.05] mb-3 tracking-tight">A Cleaner, Safer<br/><span className="text-saffron-500">Better Tomorrow</span></h2>
           <p className="text-sm text-gray-500 leading-relaxed">Report civic issues in your area and help us build a better city for everyone.</p>
         </div>
         <div className="space-y-3">
@@ -593,7 +593,7 @@ function DashboardView({user,complaints,loading,onChanged}){
     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
       <div>
         <p className="text-sm text-gray-400">{greeting()},</p>
-        <h2 className="font-display text-2xl font-extrabold text-navy-800">{user.full_name} <span className="inline-block">👋</span></h2>
+        <h2 className="font-display text-3xl font-extrabold text-navy-800 tracking-tight">{user.full_name} <span className="inline-block">👋</span></h2>
         <p className="text-sm text-gray-500 mt-1">Here's an overview of civic complaints and their current status.</p>
       </div>
       <div className="bg-gray-50 border border-gray-100 rounded-xl px-5 py-3 flex items-start gap-3 max-w-sm">
@@ -727,7 +727,7 @@ function MyTicketsView({user,tickets,loading,onChanged}){
     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
       <div>
         <p className="text-sm text-gray-400">Welcome back,</p>
-        <h2 className="font-display text-2xl font-extrabold text-navy-800">{user.full_name} <span className="inline-block">👋</span></h2>
+        <h2 className="font-display text-3xl font-extrabold text-navy-800 tracking-tight">{user.full_name} <span className="inline-block">👋</span></h2>
         <p className="text-sm text-gray-500 mt-1">Here's an overview of your complaints and their progress.</p>
       </div>
       <div className="bg-gray-50 border border-gray-100 rounded-xl px-5 py-3 flex items-start gap-3 max-w-sm">
@@ -846,15 +846,15 @@ const authFeatures=[
 ];
 const authStats=[{v:'7',l:'Civic Domains'},{v:'3',l:'Languages Supported'},{v:'ML',l:'Powered Routing'}];
 
+const authHeroBg={backgroundImage:"linear-gradient(100deg, rgba(6,11,22,.93) 0%, rgba(6,11,22,.65) 50%, rgba(6,11,22,.4) 100%), linear-gradient(0deg, rgba(6,11,22,.8) 0%, rgba(6,11,22,0) 38%), url('assets/hero-ghat.jpg')",backgroundSize:'cover',backgroundPosition:'center'};
 function AuthHero(){
-  return<div className="hidden lg:flex relative overflow-hidden header-bg text-white flex-col justify-between px-12 py-14">
-    <div className="absolute inset-0 dot-bg opacity-10 pointer-events-none"></div>
+  return<div className="hidden lg:flex relative overflow-hidden text-white flex-col justify-between px-12 py-14" style={authHeroBg}>
     <div className="relative z-10 anim-slide-up">
       <div className="flex items-center gap-2 mb-6">
         <span className="w-8 h-px bg-saffron-500"></span>
         <span className="text-[11px] font-bold tracking-[0.25em] text-navy-300">PEOPLE · TECHNOLOGY · BETTER CITIES</span>
       </div>
-      <h2 className="font-display text-4xl font-extrabold leading-tight mb-4">Your Voice<br/><span className="text-saffron-400">A Stronger Tomorrow</span></h2>
+      <h2 className="font-display text-5xl font-extrabold leading-[1.05] mb-4 drop-shadow-sm">Your Voice<br/><span className="text-saffron-400">A Stronger Tomorrow</span></h2>
       <p className="text-navy-200 text-sm leading-relaxed max-w-sm mb-8">Report civic issues, track their progress, and help build cleaner, safer, and more livable cities for everyone.</p>
       <div className="space-y-4 mb-8">
         {authFeatures.map((f,i)=><div key={i} className="flex items-center gap-3">
@@ -980,6 +980,17 @@ function navItemsFor(user){
   return items;
 }
 
+function ThemeSwitch({dark,onToggle}){
+  return<button onClick={onToggle} role="switch" aria-checked={dark} title={dark?'Switch to light mode':'Switch to dark mode'} aria-label="Toggle dark mode"
+    className={`relative w-14 h-7 rounded-full flex-shrink-0 flex items-center px-[3px] transition-colors duration-300 border ${dark?'bg-navy-950 border-white/10':'bg-white/15 border-white/20'} hover:brightness-110`}>
+    <i className="fas fa-sun text-saffron-400 text-[10px] absolute left-[6px] transition-opacity duration-300" style={{opacity:dark?0:1}}></i>
+    <i className="fas fa-moon text-navy-200 text-[10px] absolute right-[6px] transition-opacity duration-300" style={{opacity:dark?1:0}}></i>
+    <span className={`w-5 h-5 rounded-full bg-white shadow-md flex items-center justify-center transition-transform duration-300 ease-out ${dark?'translate-x-7':'translate-x-0'}`}>
+      <i className={`fas ${dark?'fa-moon text-navy-700':'fa-sun text-saffron-500'} text-[9px]`}></i>
+    </span>
+  </button>;
+}
+
 function Header({activeTab,setActiveTab,user,authChecked,onLogout,dark,onToggleDark}){
   const navItems=navItemsFor(user);
   return<header className="header-bg text-white shadow-2xl sticky top-0 z-40">
@@ -996,9 +1007,7 @@ function Header({activeTab,setActiveTab,user,authChecked,onLogout,dark,onToggleD
         </nav>
         <div className="flex items-center gap-2 sm:gap-3">
           <div className="hidden lg:flex items-center gap-1.5 bg-white/10 backdrop-blur px-3 py-1.5 rounded-full"><i className="fas fa-bolt text-saffron-400 text-xs"></i><span className="text-[10px] font-bold text-navy-200 tracking-wide">ML POWERED</span></div>
-          <button onClick={onToggleDark} title={dark?'Switch to light mode':'Switch to dark mode'} aria-label="Toggle dark mode" className="w-9 h-9 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors">
-            <i className={`fas ${dark?'fa-sun text-saffron-400':'fa-moon'} text-sm`}></i>
-          </button>
+          <ThemeSwitch dark={dark} onToggle={onToggleDark}/>
           {authChecked&&(user?
             <div className="flex items-center gap-2">
               <div className="hidden sm:flex items-center gap-2 bg-white/10 backdrop-blur rounded-full pl-1 pr-3 py-1">
@@ -1023,6 +1032,27 @@ function Header({activeTab,setActiveTab,user,authChecked,onLogout,dark,onToggleD
       </div>
     </div>
   </header>;
+}
+
+/* ===== FOOTER ===== */
+function SiteFooter(){
+  return<footer className="relative mt-auto overflow-hidden">
+    <div className="relative w-full h-44 sm:h-60 lg:h-72">
+      <img src="assets/footer-skyline-light.webp" alt="" aria-hidden="true" className="absolute inset-0 w-full h-full object-cover object-bottom block dark:hidden"/>
+      <img src="assets/footer-skyline-dark.webp" alt="" aria-hidden="true" className="absolute inset-0 w-full h-full object-cover object-bottom hidden dark:block"/>
+      <div className="absolute inset-x-0 bottom-0 pb-3 sm:pb-5">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-center">
+          <div className="flex items-center gap-2 text-[11px] sm:text-xs font-medium text-navy-600 dark:text-navy-200">
+            <span>Government</span><span className="text-saffron-400">|</span><span>Citizens</span><span className="text-saffron-400">|</span><span>Smarter Cities</span>
+          </div>
+          <span className="font-display font-semibold text-[11px] sm:text-xs text-navy-800 dark:text-white">Nagarik Mitra v3.0<span className="mx-1.5 text-saffron-400">|</span>Making Cities More Livable, Together</span>
+          <div className="flex items-center gap-2 text-[11px] sm:text-xs font-medium text-navy-600 dark:text-navy-200">
+            <span>Privacy</span><span className="text-saffron-400">|</span><span>Terms</span><span className="text-saffron-400">|</span><span>Help</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>;
 }
 
 /* ===== APP ===== */
@@ -1152,11 +1182,7 @@ function App(){
         {activeTab==='mytickets'&&<MyTicketsView user={user} tickets={myTickets} loading={loadingMyTickets} onChanged={fetchMyTickets}/>}
       </main>
     }
-    <footer className="border-t border-gray-200 bg-white/60 backdrop-blur py-4 mt-auto">
-      <div className="max-w-7xl mx-auto px-4 flex items-center justify-center text-xs text-gray-400">
-        <span className="font-display font-semibold text-gray-500">Nagarik Mitra v3.0 · Making Cities More Livable, Together</span>
-      </div>
-    </footer>
+    <SiteFooter/>
   </div>;
 }
 
