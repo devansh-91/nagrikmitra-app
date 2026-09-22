@@ -1070,6 +1070,17 @@ function Header({activeTab,setActiveTab,user,authChecked,onLogout,dark,onToggleD
 }
 
 /* ===== FOOTER ===== */
+function SiteFooter(){
+  return<footer className="mt-auto border-t border-gray-200 dark:border-white/10 bg-[#F0F3F8] dark:bg-navy-950 transition-colors">
+    <div className="max-w-7xl mx-auto px-4 sm:px-8 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-center text-[11px] sm:text-xs">
+      <span className="font-medium text-navy-600 dark:text-navy-200">© {new Date().getFullYear()} Nagarik Mitra</span>
+      <div className="flex items-center gap-2 font-medium text-navy-600 dark:text-navy-200">
+        <span>Privacy</span><span className="text-saffron-400">|</span><span>Terms</span><span className="text-saffron-400">|</span><span>Help</span>
+      </div>
+    </div>
+  </footer>;
+}
+
 /* ===== APP ===== */
 function App(){
   const[activeTab,setActiveTab]=useState('submit');
@@ -1199,6 +1210,7 @@ function App(){
         {activeTab==='mytickets'&&<MyTicketsView user={user} tickets={myTickets} loading={loadingMyTickets} onChanged={fetchMyTickets}/>}
       </main>
     }
+    <SiteFooter/>
   </div>;
 }
 
