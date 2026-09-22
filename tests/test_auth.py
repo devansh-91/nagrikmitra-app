@@ -16,7 +16,13 @@ Cover:
 - GET /my-tickets returns only the logged-in citizen's own tickets.
 
 Each test gets an isolated on-disk SQLite DB (tmp_path) via monkeypatching
-nagrikmitra.store.DB_PATH, so this never touches data/nagrikmitra.db.
+nagrikmitra.store.DB_PATH, so this never touches data/nagrikmitra.db. When
+DATABASE_URL is set (running against Postgres, e.g. to check parity with
+the Render/Neon deployment), DB_PATH is irrelevant — every test would
+otherwise share one persistent database and collide on the fixed
+usernames/emails the tests below reuse (a 409 from a leftover "ramesh"
+row, not a real app bug), so the tables are truncated before each test
+instead.
 """
 import pytest
 from fastapi.testclient import TestClient
@@ -31,6 +37,14 @@ from nagrikmitra.auth import hash_password, verify_password
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "DB_PATH", tmp_path / "test_nagrikmitra.db")
     monkeypatch.setattr(auth_routes, "OFFICER_SIGNUP_CODE", "test-signup-code")
+    if store._IS_POSTGRES:
+        store.init_db()
+        conn = store._connect()
+        try:
+            store._exec(conn, "TRUNCATE users, tickets, overrides RESTART IDENTITY CASCADE")
+            conn.commit()
+        finally:
+            conn.close()
     return TestClient(api.app)
 
 
