@@ -1036,21 +1036,21 @@ function Header({activeTab,setActiveTab,user,authChecked,onLogout,dark,onToggleD
 
 /* ===== FOOTER ===== */
 function SiteFooter(){
-  return<footer className="relative mt-auto overflow-hidden">
-    <div className="relative w-full h-44 sm:h-60 lg:h-72">
-      <img src="assets/footer-skyline-light.webp" alt="" aria-hidden="true" className="absolute inset-0 w-full h-full object-cover object-bottom block dark:hidden"/>
-      <img src="assets/footer-skyline-dark.webp" alt="" aria-hidden="true" className="absolute inset-0 w-full h-full object-cover object-bottom hidden dark:block"/>
-      <div className="absolute inset-x-0 bottom-0 pb-3 sm:pb-5">
-        <div className="max-w-7xl mx-auto px-4 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 text-center">
-          <div className="flex items-center gap-2 text-[11px] sm:text-xs font-medium text-navy-600 dark:text-navy-200">
-            <span>Government</span><span className="text-saffron-400">|</span><span>Citizens</span><span className="text-saffron-400">|</span><span>Smarter Cities</span>
-          </div>
-          <span className="font-display font-semibold text-[11px] sm:text-xs text-navy-800 dark:text-white">Nagarik Mitra v3.0<span className="mx-1.5 text-saffron-400">|</span>Making Cities More Livable, Together</span>
-          <div className="flex items-center gap-2 text-[11px] sm:text-xs font-medium text-navy-600 dark:text-navy-200">
-            <span>Privacy</span><span className="text-saffron-400">|</span><span>Terms</span><span className="text-saffron-400">|</span><span>Help</span>
-          </div>
+  return<footer className="relative mt-auto">
+    <div className="border-t border-gray-200 dark:border-white/10 bg-[#F0F3F8] dark:bg-navy-950 transition-colors">
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-center">
+        <div className="flex items-center gap-2 text-[11px] sm:text-xs font-medium text-navy-600 dark:text-navy-200">
+          <span>Government</span><span className="text-saffron-400">|</span><span>Citizens</span><span className="text-saffron-400">|</span><span>Smarter Cities</span>
+        </div>
+        <span className="font-display font-semibold text-[11px] sm:text-xs text-navy-800 dark:text-white">Nagarik Mitra v3.0<span className="mx-1.5 text-saffron-400">|</span>Making Cities More Livable, Together</span>
+        <div className="flex items-center gap-2 text-[11px] sm:text-xs font-medium text-navy-600 dark:text-navy-200">
+          <span>Privacy</span><span className="text-saffron-400">|</span><span>Terms</span><span className="text-saffron-400">|</span><span>Help</span>
         </div>
       </div>
+    </div>
+    <div className="w-full h-32 sm:h-44 lg:h-56 bg-[#F0F3F8] dark:bg-navy-950 transition-colors overflow-hidden">
+      <img src="assets/footer-skyline-light.webp" alt="Illustration of a city skyline" className="w-full h-full object-cover object-bottom block dark:hidden"/>
+      <img src="assets/footer-skyline-dark.webp" alt="Illustration of a city skyline" className="w-full h-full object-cover object-bottom hidden dark:block"/>
     </div>
   </footer>;
 }
